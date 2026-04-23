@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   RefreshCw,
@@ -11,15 +11,11 @@ import {
   ArrowRightLeft,
   Layers,
   Search,
-  Filter,
-  Check,
 } from "lucide-react";
 import type {
   SkillMatrixResponse,
   SkillMatrixSkill,
   SkillMatrixWorkspace,
-  SyncSkillRequest,
-  BulkCopySkillsRequest,
 } from "@multica/core/types";
 import { api } from "@multica/core/api";
 import { Button } from "@multica/ui/components/ui/button";
@@ -38,13 +34,6 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@multica/ui/components/ui/tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@multica/ui/components/ui/select";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { toast } from "sonner";
@@ -75,7 +64,7 @@ const skillMatrixKeys = {
 export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSkill, setSelectedSkill] = useState<SkillMatrixSkill | null>(null);
+  const [selectedSkills, setSelectedSkills] = useState<SkillMatrixSkill[]>([]);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [selectedTargetWorkspaces, setSelectedTargetWorkspaces] = useState<string[]>([]);
   const [overwriteExisting, setOverwriteExisting] = useState(false);
@@ -88,39 +77,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     staleTime: 0, // Always refetch when component mounts or cache is invalidated
   });
 
-  // Sync mutation
-  const syncMutation = useMutation({
-    mutationFn: ({ skillId, data }: { skillId: string; data: SyncSkillRequest }) =>
-      api.syncSkillToWorkspaces(skillId, data),
-    onSuccess: (result) => {
-      toast.success(`Synced to ${result.success_count} workspaces`);
-      if (result.failed_count > 0) {
-        toast.error(`Failed to sync to ${result.failed_count} workspaces`);
-      }
-      queryClient.invalidateQueries({ queryKey: skillMatrixKeys.all });
-      setSyncDialogOpen(false);
-      setSelectedTargetWorkspaces([]);
-    },
-    onError: () => {
-      toast.error("Failed to sync skill");
-    },
-  });
 
-  // Bulk copy mutation
-  const bulkCopyMutation = useMutation({
-    mutationFn: (data: BulkCopySkillsRequest) => api.bulkCopySkills(data),
-    onSuccess: (result) => {
-      toast.success(`Copied ${result.copied_count} skills`);
-      if (result.skipped_count > 0) {
-        toast.info(`Skipped ${result.skipped_count} existing skills`);
-      }
-      queryClient.invalidateQueries({ queryKey: skillMatrixKeys.all });
-      setBulkSelection([]);
-    },
-    onError: () => {
-      toast.error("Failed to copy skills");
-    },
-  });
 
   // Filter skills based on search
   const filteredData = useMemo(() => {
@@ -142,23 +99,51 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     };
   }, [matrixData, searchQuery]);
 
-  // Handle sync dialog open
+  // Handle sync dialog open for single skill
   const handleSyncClick = (skill: SkillMatrixSkill) => {
-    setSelectedSkill(skill);
+    setSelectedSkills([skill]);
+    setSyncDialogOpen(true);
+  };
+
+  // Handle bulk sync dialog open
+  const handleBulkSyncClick = () => {
+    if (bulkSelection.length === 0 || !matrixData) return;
+    const skillsToSync = matrixData.skills.filter((s) => bulkSelection.includes(s.id));
+    setSelectedSkills(skillsToSync);
     setSyncDialogOpen(true);
   };
 
   // Handle sync submit
-  const handleSyncSubmit = () => {
-    if (!selectedSkill || selectedTargetWorkspaces.length === 0) return;
+  const handleSyncSubmit = async () => {
+    if (selectedSkills.length === 0 || selectedTargetWorkspaces.length === 0) return;
 
-    syncMutation.mutate({
-      skillId: selectedSkill.id,
-      data: {
-        target_workspace_ids: selectedTargetWorkspaces,
-        overwrite_existing: overwriteExisting,
-      },
-    });
+    let totalSuccess = 0;
+    let totalFailed = 0;
+
+    for (const skill of selectedSkills) {
+      try {
+        const result = await api.syncSkillToWorkspaces(skill.id, {
+          target_workspace_ids: selectedTargetWorkspaces,
+          overwrite_existing: overwriteExisting,
+        });
+        totalSuccess += result.success_count;
+        totalFailed += result.failed_count;
+      } catch {
+        totalFailed += selectedTargetWorkspaces.length;
+      }
+    }
+
+    if (totalSuccess > 0) {
+      toast.success(`Synced ${selectedSkills.length} skills to ${totalSuccess} workspaces`);
+    }
+    if (totalFailed > 0) {
+      toast.error(`Failed to sync to ${totalFailed} workspaces`);
+    }
+
+    queryClient.invalidateQueries({ queryKey: skillMatrixKeys.all });
+    setSyncDialogOpen(false);
+    setSelectedTargetWorkspaces([]);
+    setBulkSelection([]);
   };
 
   // Toggle workspace selection
@@ -228,6 +213,14 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
               onClick={() => setBulkSelection([])}
             >
               Clear
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => handleBulkSyncClick()}
+            >
+              <Copy className="h-4 w-4 mr-1" />
+              Sync Selected
             </Button>
           </div>
         )}
@@ -358,10 +351,14 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowRightLeft className="h-5 w-5" />
-              Sync Skill
+              {selectedSkills.length > 1 ? `Sync ${selectedSkills.length} Skills` : "Sync Skill"}
             </DialogTitle>
             <DialogDescription>
-              Copy <strong>{selectedSkill?.name}</strong> to selected workspaces
+              {selectedSkills.length > 1 ? (
+                <>Copy <strong>{selectedSkills.length} skills</strong> to selected workspaces</>
+              ) : (
+                <>Copy <strong>{selectedSkills[0]?.name}</strong> to selected workspaces</>
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -428,14 +425,10 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
             </Button>
             <Button
               onClick={handleSyncSubmit}
-              disabled={selectedTargetWorkspaces.length === 0 || syncMutation.isPending}
+              disabled={selectedTargetWorkspaces.length === 0}
             >
-              {syncMutation.isPending ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Copy className="h-4 w-4 mr-2" />
-              )}
-              Sync to {selectedTargetWorkspaces.length} workspace
+              <Copy className="h-4 w-4 mr-2" />
+              Sync{selectedSkills.length > 1 ? ` ${selectedSkills.length} skills` : ""} to {selectedTargetWorkspaces.length} workspace
               {selectedTargetWorkspaces.length !== 1 ? "s" : ""}
             </Button>
           </DialogFooter>
