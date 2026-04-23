@@ -6,8 +6,6 @@ import {
   ArrowLeft,
   RefreshCw,
   Copy,
-  CheckCircle2,
-  XCircle,
   ArrowRightLeft,
   Layers,
   Search,
@@ -69,6 +67,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
   const [selectedTargetWorkspaces, setSelectedTargetWorkspaces] = useState<string[]>([]);
   const [overwriteExisting, setOverwriteExisting] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<string[]>([]);
+  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
 
   // Fetch matrix data
   const { data: matrixData, isLoading } = useQuery({
@@ -162,6 +161,20 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
         ? prev.filter((id) => id !== skillId)
         : [...prev, skillId]
     );
+  };
+
+  // Toggle cell selection (skill-workspace pair)
+  const toggleCellSelection = (skillId: string, wsId: string) => {
+    const cellKey = `${skillId}-${wsId}`;
+    setSelectedCells((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(cellKey)) {
+        newSet.delete(cellKey);
+      } else {
+        newSet.add(cellKey);
+      }
+      return newSet;
+    });
   };
 
   // Get skill availability in workspace
@@ -304,13 +317,16 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                     </td>
                     {filteredData.workspaces.map((ws, wsIdx) => {
                       const hasSkill = hasSkillInWorkspace(skillIdx, wsIdx);
+                      const cellKey = `${skill.id}-${ws.id}`;
+                      const isSelected = selectedCells.has(cellKey);
                       return (
                         <td key={ws.id} className="px-3 py-3 text-center">
-                          {hasSkill ? (
-                            <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" />
-                          ) : (
-                            <XCircle className="h-5 w-5 text-muted-foreground/30 mx-auto" />
-                          )}
+                          <Checkbox
+                            checked={isSelected || hasSkill}
+                            disabled={hasSkill}
+                            onCheckedChange={() => toggleCellSelection(skill.id, ws.id)}
+                            className={hasSkill ? "opacity-50" : ""}
+                          />
                         </td>
                       );
                     })}
