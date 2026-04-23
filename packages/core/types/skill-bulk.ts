@@ -2,6 +2,7 @@
 
 export interface SkillMatrixSkill {
   id: string;
+  workspace_id: string;
   name: string;
   description: string;
 }
@@ -17,6 +18,7 @@ export interface SkillMatrixResponse {
   skills: SkillMatrixSkill[];
   workspaces: SkillMatrixWorkspace[];
   matrix: boolean[][]; // [skill_index][workspace_index] = has_skill
+  skill_lookup: Record<string, Record<string, string>>; // skill_name -> workspace_id -> skill_id
 }
 
 export interface SkillMatrixItem {

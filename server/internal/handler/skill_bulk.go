@@ -24,13 +24,15 @@ type SkillMatrixItem struct {
 }
 
 type SkillMatrixResponse struct {
-	Skills     []SkillMatrixSkill     `json:"skills"`
-	Workspaces []SkillMatrixWorkspace `json:"workspaces"`
-	Matrix     [][]bool               `json:"matrix"` // [skill_index][workspace_index] = has_skill
+	Skills     []SkillMatrixSkill            `json:"skills"`
+	Workspaces []SkillMatrixWorkspace       `json:"workspaces"`
+	Matrix     [][]bool                     `json:"matrix"` // [skill_index][workspace_index] = has_skill
+	SkillLookup map[string]map[string]string `json:"skill_lookup"` // skill_name -> workspace_id -> skill_id
 }
 
 type SkillMatrixSkill struct {
 	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
@@ -146,13 +148,28 @@ func (h *Handler) GetSkillMatrix(w http.ResponseWriter, r *http.Request) {
 		wsIndexMap[uuidToString(ws.ID)] = i
 	}
 
-	// Get unique skills by name
+	// Build skill lookup map: skill_name -> workspace_id -> skill_id
+	// This allows the frontend to find the correct skill ID for any (name, workspace) pair
+	skillLookup := make(map[string]map[string]string)
+	for _, s := range skills {
+		name := s.Name
+		wsID := uuidToString(s.WorkspaceID)
+		skillID := uuidToString(s.ID)
+		
+		if skillLookup[name] == nil {
+			skillLookup[name] = make(map[string]string)
+		}
+		skillLookup[name][wsID] = skillID
+	}
+
+	// Get unique skills by name for matrix rows
 	skillMap := make(map[string]*SkillMatrixSkill)
 	for _, s := range skills {
 		name := s.Name
 		if _, exists := skillMap[name]; !exists {
 			skillMap[name] = &SkillMatrixSkill{
 				ID:          uuidToString(s.ID),
+				WorkspaceID: uuidToString(s.WorkspaceID),
 				Name:        s.Name,
 				Description: s.Description,
 			}
@@ -182,9 +199,10 @@ func (h *Handler) GetSkillMatrix(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, SkillMatrixResponse{
-		Skills:     skillList,
-		Workspaces: wsList,
-		Matrix:     matrix,
+		Skills:      skillList,
+		Workspaces:  wsList,
+		Matrix:      matrix,
+		SkillLookup: skillLookup,
 	})
 }
 

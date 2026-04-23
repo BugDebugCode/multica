@@ -109,13 +109,10 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
   };
 
   // Find actual skill ID for a skill name in a specific workspace
-  // This is needed because the matrix shows unique skills by name, but each
-  // workspace may have its own skill instance with a different ID
+  // Use the skill_lookup map from the API response
   const findSkillIdForWorkspace = (skillName: string, wsId: string): string | null => {
     if (!matrixData) return null;
-    // Find all skills with this name and return the one for this workspace
-    const skill = matrixData.skills.find((s) => s.name === skillName && s.workspace_id === wsId);
-    return skill?.id ?? null;
+    return matrixData.skill_lookup?.[skillName]?.[wsId] ?? null;
   };
 
   // Check if cell is selected
