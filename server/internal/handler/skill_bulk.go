@@ -485,3 +485,76 @@ func (h *Handler) CompareSkillAcrossWorkspaces(w http.ResponseWriter, r *http.Re
 		Differences: differences,
 	})
 }
+
+// BulkDeleteSkillsRequest represents a request to delete multiple skills
+type BulkDeleteSkillsRequest struct {
+	SkillIDs []string `json:"skill_ids"`
+}
+
+// BulkDeleteSkillsResponse represents the result of bulk delete operation
+type BulkDeleteSkillsResponse struct {
+	DeletedCount int      `json:"deleted_count"`
+	FailedCount  int      `json:"failed_count"`
+	FailedIDs    []string `json:"failed_ids,omitempty"`
+}
+
+// BulkDeleteSkills deletes multiple skills across workspaces
+func (h *Handler) BulkDeleteSkills(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var req BulkDeleteSkillsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if len(req.SkillIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "skill_ids are required")
+		return
+	}
+
+	deletedCount := 0
+	failedIDs := []string{}
+
+	for _, skillID := range req.SkillIDs {
+		skillUUID := parseUUID(skillID)
+
+		// Get skill to check workspace
+		skill, err := h.Queries.GetSkill(r.Context(), skillUUID)
+		if err != nil {
+			failedIDs = append(failedIDs, skillID)
+			continue
+		}
+
+		// Check user can manage this skill
+		if !h.canManageSkill(w, r, skill) {
+			failedIDs = append(failedIDs, skillID)
+			continue
+		}
+
+		wsID := uuidToString(skill.WorkspaceID)
+
+		// Delete skill
+		if err := h.Queries.DeleteSkill(r.Context(), skillUUID); err != nil {
+			failedIDs = append(failedIDs, skillID)
+			continue
+		}
+
+		deletedCount++
+
+		// Publish event
+		actorType, actorID := h.resolveActor(r, userID, wsID)
+		h.publish(protocol.EventSkillDeleted, wsID, actorType, actorID, map[string]any{
+			"skill_id": skillID,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, BulkDeleteSkillsResponse{
+		DeletedCount: deletedCount,
+		FailedCount:  len(failedIDs),
+		FailedIDs:    failedIDs,
+	})
+}

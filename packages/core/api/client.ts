@@ -881,6 +881,13 @@ export class ApiClient {
     });
   }
 
+  async bulkDeleteSkills(data: { skill_ids: string[] }): Promise<{ deleted_count: number; failed_count: number; failed_ids?: string[] }> {
+    return this.fetch("/api/skills/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   // Personal Access Tokens
   async listPersonalAccessTokens(): Promise<PersonalAccessToken[]> {
     return this.fetch("/api/tokens");

@@ -10,6 +10,7 @@ import {
   Search,
   Check,
   X,
+  Trash2,
 } from "lucide-react";
 import type {
   SkillMatrixResponse,
@@ -19,7 +20,6 @@ import type {
 import { api } from "@multica/core/api";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
-import { Checkbox } from "@multica/ui/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +50,7 @@ interface SkillMatrixPageProps {
 interface CellSelection {
   skillId: string;
   workspaceId: string;
+  exists: boolean; // true = skill exists (will be deleted), false = skill doesn't exist (will be synced)
 }
 
 // ---------------------------------------------------------------------------
@@ -70,8 +71,8 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCells, setSelectedCells] = useState<CellSelection[]>([]);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [overwriteExisting, setOverwriteExisting] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Fetch matrix data
   const { data: matrixData, isLoading } = useQuery({
@@ -112,58 +113,60 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
   };
 
   // Toggle cell selection
-  const toggleCell = (skillId: string, wsId: string) => {
+  const toggleCell = (skillId: string, wsId: string, exists: boolean) => {
     setSelectedCells((prev) => {
-      const exists = prev.some((c) => c.skillId === skillId && c.workspaceId === wsId);
-      if (exists) {
+      const existing = prev.find((c) => c.skillId === skillId && c.workspaceId === wsId);
+      if (existing) {
         return prev.filter((c) => !(c.skillId === skillId && c.workspaceId === wsId));
       }
-      return [...prev, { skillId, workspaceId: wsId }];
+      return [...prev, { skillId, workspaceId: wsId, exists }];
     });
   };
 
-  // Get unique skills and workspaces from selection
-  const selectedSkills = useMemo(() => {
+  // Get selections by operation type
+  const syncSelections = selectedCells.filter((c) => !c.exists);
+  const deleteSelections = selectedCells.filter((c) => c.exists);
+
+  // Get unique skills for each operation
+  const skillsToSync = useMemo(() => {
     if (!matrixData) return [];
-    const skillIds = [...new Set(selectedCells.map((c) => c.skillId))];
+    const skillIds = [...new Set(syncSelections.map((c) => c.skillId))];
     return skillIds
       .map((id) => matrixData.skills.find((s) => s.id === id))
       .filter(Boolean) as SkillMatrixSkill[];
-  }, [selectedCells, matrixData]);
+  }, [syncSelections, matrixData]);
 
-  const selectedWorkspaces = useMemo(() => {
+  const skillsToDelete = useMemo(() => {
     if (!matrixData) return [];
-    const wsIds = [...new Set(selectedCells.map((c) => c.workspaceId))];
-    return wsIds
-      .map((id) => matrixData.workspaces.find((w) => w.id === id))
-      .filter(Boolean) as SkillMatrixWorkspace[];
-  }, [selectedCells, matrixData]);
+    const skillIds = [...new Set(deleteSelections.map((c) => c.skillId))];
+    return skillIds
+      .map((id) => matrixData.skills.find((s) => s.id === id))
+      .filter(Boolean) as SkillMatrixSkill[];
+  }, [deleteSelections, matrixData]);
 
-  // Group selections by skill for sync
-  const selectionsBySkill = useMemo(() => {
+  // Group sync selections by skill
+  const syncBySkill = useMemo(() => {
     const grouped: Record<string, string[]> = {};
-    selectedCells.forEach((cell) => {
-      if (!grouped[cell.skillId]) {
-        grouped[cell.skillId] = [];
-      }
+    syncSelections.forEach((cell) => {
+      if (!grouped[cell.skillId]) grouped[cell.skillId] = [];
       grouped[cell.skillId].push(cell.workspaceId);
     });
     return grouped;
-  }, [selectedCells]);
+  }, [syncSelections]);
 
   // Handle sync
   const handleSync = async () => {
-    if (selectedCells.length === 0 || !matrixData) return;
+    if (syncSelections.length === 0 || !matrixData) return;
 
-    setIsSyncing(true);
+    setIsProcessing(true);
     let totalSuccess = 0;
     let totalFailed = 0;
 
-    for (const [skillId, workspaceIds] of Object.entries(selectionsBySkill)) {
+    for (const [skillId, workspaceIds] of Object.entries(syncBySkill)) {
       try {
         const result = await api.syncSkillToWorkspaces(skillId, {
           target_workspace_ids: workspaceIds,
-          overwrite_existing: overwriteExisting,
+          overwrite_existing: false,
         });
         totalSuccess += result.success_count;
         totalFailed += result.failed_count;
@@ -173,7 +176,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     }
 
     if (totalSuccess > 0) {
-      toast.success(`Synced ${selectedSkills.length} skills to ${totalSuccess} workspaces`);
+      toast.success(`Synced ${skillsToSync.length} skills to ${totalSuccess} workspaces`);
     }
     if (totalFailed > 0) {
       toast.error(`Failed to sync ${totalFailed} workspaces`);
@@ -182,7 +185,36 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     queryClient.invalidateQueries({ queryKey: skillMatrixKeys.all });
     setSelectedCells([]);
     setSyncDialogOpen(false);
-    setIsSyncing(false);
+    setIsProcessing(false);
+  };
+
+  // Handle delete
+  const handleDelete = async () => {
+    if (deleteSelections.length === 0) return;
+
+    setIsProcessing(true);
+    
+    // Get unique skill IDs to delete
+    const skillIdsToDelete = [...new Set(deleteSelections.map((c) => c.skillId))];
+    
+    try {
+      const result = await api.bulkDeleteSkills({ skill_ids: skillIdsToDelete });
+      
+      if (result.deleted_count > 0) {
+        toast.success(`Deleted ${result.deleted_count} skills`);
+      }
+      if (result.failed_count > 0) {
+        toast.error(`Failed to delete ${result.failed_count} skills`);
+      }
+      
+      queryClient.invalidateQueries({ queryKey: skillMatrixKeys.all });
+      setSelectedCells([]);
+      setDeleteDialogOpen(false);
+    } catch {
+      toast.error("Failed to delete skills");
+    }
+    
+    setIsProcessing(false);
   };
 
   // Clear all selections
@@ -190,25 +222,11 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     setSelectedCells([]);
   };
 
-  // Select all missing cells (all skills to all workspaces where they don't exist)
-  const selectAllMissing = () => {
-    if (!filteredData) return;
-    const newSelections: CellSelection[] = [];
-    filteredData.skills.forEach((skill, skillIdx) => {
-      filteredData.workspaces.forEach((ws, wsIdx) => {
-        if (!hasSkillInWorkspace(skillIdx, wsIdx)) {
-          newSelections.push({ skillId: skill.id, workspaceId: ws.id });
-        }
-      });
-    });
-    setSelectedCells(newSelections);
-  };
-
   return (
     <div className="flex flex-col h-full">
       <PageHeader
         title="Skill Matrix"
-        description="Select cells to sync skills across workspaces"
+        description="Click cells to sync (add) or delete skills across workspaces"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={onBack}>
@@ -244,6 +262,16 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
               <Badge variant="default" className="bg-primary">
                 {selectedCells.length} selected
               </Badge>
+              {syncSelections.length > 0 && (
+                <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                  {syncSelections.length} to sync
+                </Badge>
+              )}
+              {deleteSelections.length > 0 && (
+                <Badge variant="secondary" className="bg-red-100 text-red-700">
+                  {deleteSelections.length} to delete
+                </Badge>
+              )}
               <Button variant="ghost" size="sm" onClick={clearSelection}>
                 <X className="h-4 w-4" />
               </Button>
@@ -251,22 +279,25 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={selectAllMissing}
-            disabled={!filteredData}
-          >
-            Select All Missing
-          </Button>
-          {selectedCells.length > 0 && (
+          {syncSelections.length > 0 && (
             <Button
               variant="default"
               size="sm"
+              className="bg-blue-600 hover:bg-blue-700"
               onClick={() => setSyncDialogOpen(true)}
             >
               <ArrowRightLeft className="h-4 w-4 mr-2" />
-              Sync {selectedCells.length} cells
+              Sync {syncSelections.length}
+            </Button>
+          )}
+          {deleteSelections.length > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete {deleteSelections.length}
             </Button>
           )}
         </div>
@@ -278,15 +309,19 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           <div className="w-4 h-4 rounded bg-green-500/20 border border-green-500/50 flex items-center justify-center">
             <Check className="w-3 h-3 text-green-600" />
           </div>
-          <span>Skill exists</span>
+          <span>Skill exists (click to delete)</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded border-2 border-primary bg-primary/10" />
+          <div className="w-4 h-4 rounded bg-blue-500/20 border-2 border-blue-500" />
           <span>Selected for sync</span>
         </div>
         <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-red-500/20 border-2 border-red-500" />
+          <span>Selected for delete</span>
+        </div>
+        <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded border border-muted-foreground/30" />
-          <span>Not present (click to select)</span>
+          <span>Not present (click to sync)</span>
         </div>
       </div>
 
@@ -344,30 +379,36 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                     {filteredData.workspaces.map((ws, wsIdx) => {
                       const hasSkill = hasSkillInWorkspace(skillIdx, wsIdx);
                       const isSelected = isCellSelected(skill.id, ws.id);
+                      const selection = selectedCells.find((c) => c.skillId === skill.id && c.workspaceId === ws.id);
+                      const isDelete = selection?.exists ?? false;
                       
                       return (
                         <td key={ws.id} className="p-1 text-center">
                           <button
-                            onClick={() => !hasSkill && toggleCell(skill.id, ws.id)}
-                            disabled={hasSkill}
+                            onClick={() => toggleCell(skill.id, ws.id, hasSkill)}
                             className={`
                               w-8 h-8 rounded-md transition-all flex items-center justify-center
                               ${hasSkill 
-                                ? "bg-green-500/15 cursor-default" 
+                                ? isSelected
+                                  ? "bg-red-500/20 border-2 border-red-500 hover:bg-red-500/30"
+                                  : "bg-green-500/15 border border-green-500/30 hover:border-red-500 hover:bg-red-500/10"
                                 : isSelected
-                                  ? "bg-primary/20 border-2 border-primary hover:bg-primary/30"
-                                  : "border border-muted-foreground/20 hover:border-muted-foreground/40 hover:bg-muted/50"
+                                  ? "bg-blue-500/20 border-2 border-blue-500 hover:bg-blue-500/30"
+                                  : "border border-muted-foreground/20 hover:border-blue-500 hover:bg-blue-500/10"
                               }
                             `}
                             title={hasSkill 
-                              ? `${skill.name} exists in ${ws.name}` 
+                              ? isSelected
+                                ? `Click to cancel deletion of ${skill.name} from ${ws.name}`
+                                : `Click to delete ${skill.name} from ${ws.name}`
                               : isSelected 
-                                ? `Click to deselect ${skill.name} → ${ws.name}`
+                                ? `Click to cancel sync of ${skill.name} to ${ws.name}`
                                 : `Click to sync ${skill.name} to ${ws.name}`
                             }
                           >
-                            {hasSkill && <Check className="w-4 h-4 text-green-600" />}
-                            {isSelected && !hasSkill && <div className="w-3 h-3 rounded-sm bg-primary" />}
+                            {hasSkill && !isSelected && <Check className="w-4 h-4 text-green-600" />}
+                            {hasSkill && isSelected && <Trash2 className="w-4 h-4 text-red-600" />}
+                            {!hasSkill && isSelected && <ArrowRightLeft className="w-4 h-4 text-blue-600" />}
                           </button>
                         </td>
                       );
@@ -393,20 +434,18 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowRightLeft className="h-5 w-5" />
+              <ArrowRightLeft className="h-5 w-5 text-blue-600" />
               Sync Skills
             </DialogTitle>
             <DialogDescription>
-              You are about to sync <strong>{selectedSkills.length} skills</strong> to{" "}
-              <strong>{selectedWorkspaces.length} workspaces</strong>
-              ({selectedCells.length} total operations)
+              You are about to add <strong>{skillsToSync.length} skills</strong> to{" "}
+              <strong>{syncSelections.length} workspaces</strong>
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Summary */}
             <div className="bg-muted/50 rounded-lg p-3 space-y-2 max-h-40 overflow-auto">
-              {Object.entries(selectionsBySkill).map(([skillId, wsIds]) => {
+              {Object.entries(syncBySkill).map(([skillId, wsIds]) => {
                 const skill = matrixData?.skills.find((s) => s.id === skillId);
                 if (!skill) return null;
                 return (
@@ -417,38 +456,81 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                 );
               })}
             </div>
-
-            {/* Options */}
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="overwrite"
-                checked={overwriteExisting}
-                onCheckedChange={(checked) => setOverwriteExisting(checked === true)}
-              />
-              <label htmlFor="overwrite" className="text-sm cursor-pointer">
-                Overwrite existing skills with the same name
-              </label>
-            </div>
           </div>
 
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setSyncDialogOpen(false)}
-              disabled={isSyncing}
+              disabled={isProcessing}
             >
               Cancel
             </Button>
             <Button
               onClick={handleSync}
-              disabled={isSyncing}
+              disabled={isProcessing}
+              className="bg-blue-600 hover:bg-blue-700"
             >
-              {isSyncing ? (
+              {isProcessing ? (
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <ArrowRightLeft className="h-4 w-4 mr-2" />
               )}
-              Sync {selectedCells.length} cells
+              Sync {syncSelections.length} cells
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Delete Skills
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{skillsToDelete.length} skills</strong>?{" "}
+              This will remove them from <strong>{deleteSelections.length} workspaces</strong>.
+              <br /><br />
+              <span className="text-destructive font-medium">This action cannot be undone.</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="bg-red-50 rounded-lg p-3 space-y-2 max-h-40 overflow-auto border border-red-200">
+              {skillsToDelete.map((skill) => (
+                <div key={skill.id} className="flex items-center justify-between text-sm">
+                  <span className="font-medium">{skill.name}</span>
+                  <span className="text-muted-foreground">
+                    {deleteSelections.filter((c) => c.skillId === skill.id).length} workspace
+                    {deleteSelections.filter((c) => c.skillId === skill.id).length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isProcessing}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Delete {skillsToDelete.length} skills
             </Button>
           </DialogFooter>
         </DialogContent>
