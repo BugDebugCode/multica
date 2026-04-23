@@ -5,10 +5,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   RefreshCw,
-  Copy,
   ArrowRightLeft,
   Layers,
   Search,
+  Check,
+  X,
 } from "lucide-react";
 import type {
   SkillMatrixResponse,
@@ -46,6 +47,11 @@ interface SkillMatrixPageProps {
   onBack: () => void;
 }
 
+interface CellSelection {
+  skillId: string;
+  workspaceId: string;
+}
+
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
@@ -62,21 +68,17 @@ const skillMatrixKeys = {
 export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSkills, setSelectedSkills] = useState<SkillMatrixSkill[]>([]);
+  const [selectedCells, setSelectedCells] = useState<CellSelection[]>([]);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [selectedTargetWorkspaces, setSelectedTargetWorkspaces] = useState<string[]>([]);
   const [overwriteExisting, setOverwriteExisting] = useState(false);
-  const [bulkSelection, setBulkSelection] = useState<string[]>([]);
-  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Fetch matrix data
   const { data: matrixData, isLoading } = useQuery({
     queryKey: skillMatrixKeys.matrix(),
     queryFn: () => api.getSkillMatrix(),
-    staleTime: 0, // Always refetch when component mounts or cache is invalidated
+    staleTime: 0,
   });
-
-
 
   // Filter skills based on search
   const filteredData = useMemo(() => {
@@ -98,37 +100,75 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     };
   }, [matrixData, searchQuery]);
 
-  // Handle sync dialog open for single skill
-  const handleSyncClick = (skill: SkillMatrixSkill) => {
-    setSelectedSkills([skill]);
-    setSyncDialogOpen(true);
+  // Check if skill exists in workspace
+  const hasSkillInWorkspace = (skillIdx: number, wsIdx: number) => {
+    if (!filteredData) return false;
+    return filteredData.matrix[skillIdx]?.[wsIdx] ?? false;
   };
 
-  // Handle bulk sync dialog open
-  const handleBulkSyncClick = () => {
-    if (bulkSelection.length === 0 || !matrixData) return;
-    const skillsToSync = matrixData.skills.filter((s) => bulkSelection.includes(s.id));
-    setSelectedSkills(skillsToSync);
-    setSyncDialogOpen(true);
+  // Check if cell is selected
+  const isCellSelected = (skillId: string, wsId: string) => {
+    return selectedCells.some((c) => c.skillId === skillId && c.workspaceId === wsId);
   };
 
-  // Handle sync submit
-  const handleSyncSubmit = async () => {
-    if (selectedSkills.length === 0 || selectedTargetWorkspaces.length === 0) return;
+  // Toggle cell selection
+  const toggleCell = (skillId: string, wsId: string) => {
+    setSelectedCells((prev) => {
+      const exists = prev.some((c) => c.skillId === skillId && c.workspaceId === wsId);
+      if (exists) {
+        return prev.filter((c) => !(c.skillId === skillId && c.workspaceId === wsId));
+      }
+      return [...prev, { skillId, workspaceId: wsId }];
+    });
+  };
 
+  // Get unique skills and workspaces from selection
+  const selectedSkills = useMemo(() => {
+    if (!matrixData) return [];
+    const skillIds = [...new Set(selectedCells.map((c) => c.skillId))];
+    return skillIds
+      .map((id) => matrixData.skills.find((s) => s.id === id))
+      .filter(Boolean) as SkillMatrixSkill[];
+  }, [selectedCells, matrixData]);
+
+  const selectedWorkspaces = useMemo(() => {
+    if (!matrixData) return [];
+    const wsIds = [...new Set(selectedCells.map((c) => c.workspaceId))];
+    return wsIds
+      .map((id) => matrixData.workspaces.find((w) => w.id === id))
+      .filter(Boolean) as SkillMatrixWorkspace[];
+  }, [selectedCells, matrixData]);
+
+  // Group selections by skill for sync
+  const selectionsBySkill = useMemo(() => {
+    const grouped: Record<string, string[]> = {};
+    selectedCells.forEach((cell) => {
+      if (!grouped[cell.skillId]) {
+        grouped[cell.skillId] = [];
+      }
+      grouped[cell.skillId].push(cell.workspaceId);
+    });
+    return grouped;
+  }, [selectedCells]);
+
+  // Handle sync
+  const handleSync = async () => {
+    if (selectedCells.length === 0 || !matrixData) return;
+
+    setIsSyncing(true);
     let totalSuccess = 0;
     let totalFailed = 0;
 
-    for (const skill of selectedSkills) {
+    for (const [skillId, workspaceIds] of Object.entries(selectionsBySkill)) {
       try {
-        const result = await api.syncSkillToWorkspaces(skill.id, {
-          target_workspace_ids: selectedTargetWorkspaces,
+        const result = await api.syncSkillToWorkspaces(skillId, {
+          target_workspace_ids: workspaceIds,
           overwrite_existing: overwriteExisting,
         });
         totalSuccess += result.success_count;
         totalFailed += result.failed_count;
       } catch {
-        totalFailed += selectedTargetWorkspaces.length;
+        totalFailed += workspaceIds.length;
       }
     }
 
@@ -136,63 +176,44 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
       toast.success(`Synced ${selectedSkills.length} skills to ${totalSuccess} workspaces`);
     }
     if (totalFailed > 0) {
-      toast.error(`Failed to sync to ${totalFailed} workspaces`);
+      toast.error(`Failed to sync ${totalFailed} workspaces`);
     }
 
     queryClient.invalidateQueries({ queryKey: skillMatrixKeys.all });
+    setSelectedCells([]);
     setSyncDialogOpen(false);
-    setSelectedTargetWorkspaces([]);
-    setBulkSelection([]);
+    setIsSyncing(false);
   };
 
-  // Toggle workspace selection
-  const toggleWorkspaceSelection = (wsId: string) => {
-    setSelectedTargetWorkspaces((prev) =>
-      prev.includes(wsId)
-        ? prev.filter((id) => id !== wsId)
-        : [...prev, wsId]
-    );
+  // Clear all selections
+  const clearSelection = () => {
+    setSelectedCells([]);
   };
 
-  // Toggle bulk skill selection
-  const toggleSkillSelection = (skillId: string) => {
-    setBulkSelection((prev) =>
-      prev.includes(skillId)
-        ? prev.filter((id) => id !== skillId)
-        : [...prev, skillId]
-    );
-  };
-
-  // Toggle cell selection (skill-workspace pair)
-  const toggleCellSelection = (skillId: string, wsId: string) => {
-    const cellKey = `${skillId}-${wsId}`;
-    setSelectedCells((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(cellKey)) {
-        newSet.delete(cellKey);
-      } else {
-        newSet.add(cellKey);
-      }
-      return newSet;
+  // Select all missing cells (all skills to all workspaces where they don't exist)
+  const selectAllMissing = () => {
+    if (!filteredData) return;
+    const newSelections: CellSelection[] = [];
+    filteredData.skills.forEach((skill, skillIdx) => {
+      filteredData.workspaces.forEach((ws, wsIdx) => {
+        if (!hasSkillInWorkspace(skillIdx, wsIdx)) {
+          newSelections.push({ skillId: skill.id, workspaceId: ws.id });
+        }
+      });
     });
-  };
-
-  // Get skill availability in workspace
-  const hasSkillInWorkspace = (skillIdx: number, wsIdx: number) => {
-    if (!filteredData) return false;
-    return filteredData.matrix[skillIdx]?.[wsIdx] ?? false;
+    setSelectedCells(newSelections);
   };
 
   return (
     <div className="flex flex-col h-full">
       <PageHeader
         title="Skill Matrix"
-        description="Manage skills across all your workspaces"
+        description="Select cells to sync skills across workspaces"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={onBack}>
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Skills
+              Back
             </Button>
             <Button
               variant="outline"
@@ -207,36 +228,66 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
       />
 
       {/* Toolbar */}
-      <div className="flex items-center gap-4 px-6 py-4 border-b">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search skills..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+      <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search skills..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-80"
+            />
+          </div>
+          {selectedCells.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Badge variant="default" className="bg-primary">
+                {selectedCells.length} selected
+              </Badge>
+              <Button variant="ghost" size="sm" onClick={clearSelection}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
-        {bulkSelection.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{bulkSelection.length} selected</Badge>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setBulkSelection([])}
-            >
-              Clear
-            </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={selectAllMissing}
+            disabled={!filteredData}
+          >
+            Select All Missing
+          </Button>
+          {selectedCells.length > 0 && (
             <Button
               variant="default"
               size="sm"
-              onClick={() => handleBulkSyncClick()}
+              onClick={() => setSyncDialogOpen(true)}
             >
-              <Copy className="h-4 w-4 mr-1" />
-              Sync Selected
+              <ArrowRightLeft className="h-4 w-4 mr-2" />
+              Sync {selectedCells.length} cells
             </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-6 px-6 py-2 border-b bg-muted/10 text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-green-500/20 border border-green-500/50 flex items-center justify-center">
+            <Check className="w-3 h-3 text-green-600" />
           </div>
-        )}
+          <span>Skill exists</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded border-2 border-primary bg-primary/10" />
+          <span>Selected for sync</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded border border-muted-foreground/30" />
+          <span>Not present (click to select)</span>
+        </div>
       </div>
 
       {/* Matrix */}
@@ -247,99 +298,80 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
             <Skeleton className="h-96 w-full" />
           </div>
         ) : filteredData && filteredData.skills.length > 0 ? (
-          <div className="border rounded-lg overflow-hidden">
+          <div className="border rounded-lg overflow-hidden shadow-sm">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50">
+              <thead className="bg-muted/50 sticky top-0 z-20">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground sticky left-0 bg-muted/50 z-10">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={
-                          bulkSelection.length === filteredData.skills.length &&
-                          filteredData.skills.length > 0
-                        }
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setBulkSelection(filteredData.skills.map((s) => s.id));
-                          } else {
-                            setBulkSelection([]);
-                          }
-                        }}
-                      />
-                      <span>Skill</span>
-                    </div>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground sticky left-0 bg-muted/50 z-30 border-r min-w-[250px]">
+                    Skill
                   </th>
                   {filteredData.workspaces.map((ws) => (
                     <th
                       key={ws.id}
-                      className="px-3 py-3 text-center font-medium text-muted-foreground min-w-[100px]"
+                      className="px-2 py-3 text-center font-medium text-muted-foreground min-w-[80px]"
                     >
                       <Tooltip>
                         <TooltipTrigger>
                           <div className="flex flex-col items-center">
-                            <span className="truncate max-w-[80px]">{ws.name}</span>
-                            <Badge variant="outline" className="text-xs mt-1">
+                            <span className="truncate max-w-[70px] text-xs">{ws.name}</span>
+                            <Badge variant="outline" className="text-[10px] mt-1 px-1.5 py-0">
                               {ws.skill_count}
                             </Badge>
                           </div>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>{ws.name}</p>
-                          <p className="text-muted-foreground">{ws.skill_count} skills</p>
+                          <p className="font-medium">{ws.name}</p>
+                          <p className="text-muted-foreground text-xs">{ws.skill_count} skills</p>
                         </TooltipContent>
                       </Tooltip>
                     </th>
                   ))}
-                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">
-                    Actions
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {filteredData.skills.map((skill, skillIdx) => (
-                  <tr key={skill.id} className="hover:bg-muted/30">
-                    <td className="px-4 py-3 sticky left-0 bg-background z-10 border-r">
-                      <div className="flex items-start gap-2">
-                        <Checkbox
-                          checked={bulkSelection.includes(skill.id)}
-                          onCheckedChange={() => toggleSkillSelection(skill.id)}
-                          className="mt-0.5"
-                        />
-                        <div>
-                          <p className="font-medium">{skill.name}</p>
-                          {skill.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-1 max-w-[200px]">
-                              {skill.description}
-                            </p>
-                          )}
-                        </div>
+                  <tr key={skill.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3 sticky left-0 bg-background z-20 border-r">
+                      <div>
+                        <p className="font-medium text-sm">{skill.name}</p>
+                        {skill.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-1 max-w-[200px] mt-0.5">
+                            {skill.description}
+                          </p>
+                        )}
                       </div>
                     </td>
                     {filteredData.workspaces.map((ws, wsIdx) => {
                       const hasSkill = hasSkillInWorkspace(skillIdx, wsIdx);
-                      const cellKey = `${skill.id}-${ws.id}`;
-                      const isSelected = selectedCells.has(cellKey);
+                      const isSelected = isCellSelected(skill.id, ws.id);
+                      
                       return (
-                        <td key={ws.id} className="px-3 py-3 text-center">
-                          <Checkbox
-                            checked={isSelected || hasSkill}
+                        <td key={ws.id} className="p-1 text-center">
+                          <button
+                            onClick={() => !hasSkill && toggleCell(skill.id, ws.id)}
                             disabled={hasSkill}
-                            onCheckedChange={() => toggleCellSelection(skill.id, ws.id)}
-                            className={hasSkill ? "opacity-50" : ""}
-                          />
+                            className={`
+                              w-8 h-8 rounded-md transition-all flex items-center justify-center
+                              ${hasSkill 
+                                ? "bg-green-500/15 cursor-default" 
+                                : isSelected
+                                  ? "bg-primary/20 border-2 border-primary hover:bg-primary/30"
+                                  : "border border-muted-foreground/20 hover:border-muted-foreground/40 hover:bg-muted/50"
+                              }
+                            `}
+                            title={hasSkill 
+                              ? `${skill.name} exists in ${ws.name}` 
+                              : isSelected 
+                                ? `Click to deselect ${skill.name} → ${ws.name}`
+                                : `Click to sync ${skill.name} to ${ws.name}`
+                            }
+                          >
+                            {hasSkill && <Check className="w-4 h-4 text-green-600" />}
+                            {isSelected && !hasSkill && <div className="w-3 h-3 rounded-sm bg-primary" />}
+                          </button>
                         </td>
                       );
                     })}
-                    <td className="px-4 py-3 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSyncClick(skill)}
-                      >
-                        <Copy className="h-4 w-4 mr-1" />
-                        Sync
-                      </Button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -349,7 +381,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
             <Layers className="h-12 w-12 mb-4 opacity-50" />
             <p className="text-lg font-medium">No skills found</p>
-            <p className="text-sm">
+            <p className="text-sm mt-1">
               {searchQuery ? "Try a different search term" : "Create your first skill to get started"}
             </p>
           </div>
@@ -358,58 +390,35 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
 
       {/* Sync Dialog */}
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowRightLeft className="h-5 w-5" />
-              {selectedSkills.length > 1 ? `Sync ${selectedSkills.length} Skills` : "Sync Skill"}
+              Sync Skills
             </DialogTitle>
             <DialogDescription>
-              {selectedSkills.length > 1 ? (
-                <>Copy <strong>{selectedSkills.length} skills</strong> to selected workspaces</>
-              ) : (
-                <>Copy <strong>{selectedSkills[0]?.name}</strong> to selected workspaces</>
-              )}
+              You are about to sync <strong>{selectedSkills.length} skills</strong> to{" "}
+              <strong>{selectedWorkspaces.length} workspaces</strong>
+              ({selectedCells.length} total operations)
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Target Workspaces</label>
-              <div className="border rounded-lg divide-y max-h-60 overflow-auto">
-                {matrixData?.workspaces.map((ws) => {
-                  // Check if any selected skill exists in this workspace
-                  const hasAnySkill = selectedSkills.some((skill) => {
-                    const skillIdx = matrixData.skills.findIndex((s) => s.id === skill.id);
-                    const wsIdx = matrixData.workspaces.findIndex((w) => w.id === ws.id);
-                    return matrixData.matrix[skillIdx]?.[wsIdx] ?? false;
-                  });
-
-                  return (
-                    <div
-                      key={ws.id}
-                      className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 cursor-pointer"
-                      onClick={() => toggleWorkspaceSelection(ws.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          checked={selectedTargetWorkspaces.includes(ws.id)}
-                          onCheckedChange={() => toggleWorkspaceSelection(ws.id)}
-                        />
-                        <div>
-                          <p className="font-medium">{ws.name}</p>
-                          <p className="text-xs text-muted-foreground">{ws.slug}</p>
-                        </div>
-                      </div>
-                      {hasAnySkill && (
-                        <Badge variant="secondary">Exists</Badge>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+            {/* Summary */}
+            <div className="bg-muted/50 rounded-lg p-3 space-y-2 max-h-40 overflow-auto">
+              {Object.entries(selectionsBySkill).map(([skillId, wsIds]) => {
+                const skill = matrixData?.skills.find((s) => s.id === skillId);
+                if (!skill) return null;
+                return (
+                  <div key={skillId} className="flex items-center justify-between text-sm">
+                    <span className="font-medium">{skill.name}</span>
+                    <span className="text-muted-foreground">→ {wsIds.length} workspace{wsIds.length !== 1 ? 's' : ''}</span>
+                  </div>
+                );
+              })}
             </div>
 
+            {/* Options */}
             <div className="flex items-center gap-2">
               <Checkbox
                 id="overwrite"
@@ -417,7 +426,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                 onCheckedChange={(checked) => setOverwriteExisting(checked === true)}
               />
               <label htmlFor="overwrite" className="text-sm cursor-pointer">
-                Overwrite existing skills with same name
+                Overwrite existing skills with the same name
               </label>
             </div>
           </div>
@@ -425,20 +434,21 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
-                setSyncDialogOpen(false);
-                setSelectedTargetWorkspaces([]);
-              }}
+              onClick={() => setSyncDialogOpen(false)}
+              disabled={isSyncing}
             >
               Cancel
             </Button>
             <Button
-              onClick={handleSyncSubmit}
-              disabled={selectedTargetWorkspaces.length === 0}
+              onClick={handleSync}
+              disabled={isSyncing}
             >
-              <Copy className="h-4 w-4 mr-2" />
-              Sync{selectedSkills.length > 1 ? ` ${selectedSkills.length} skills` : ""} to {selectedTargetWorkspaces.length} workspace
-              {selectedTargetWorkspaces.length !== 1 ? "s" : ""}
+              {isSyncing ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <ArrowRightLeft className="h-4 w-4 mr-2" />
+              )}
+              Sync {selectedCells.length} cells
             </Button>
           </DialogFooter>
         </DialogContent>
