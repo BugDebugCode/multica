@@ -169,22 +169,12 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     return grouped;
   }, [syncSelections]);
 
-  // Group delete selections by skill
+  // Group delete selections by skill (for dialog display)
   const deleteBySkill = useMemo(() => {
     const grouped: Record<string, string[]> = {};
     deleteSelections.forEach((cell) => {
       if (!grouped[cell.skillId]) grouped[cell.skillId] = [];
       grouped[cell.skillId].push(cell.workspaceId);
-    });
-    return grouped;
-  }, [deleteSelections]);
-
-  // Group delete selections by workspace (for dialog display)
-  const deleteByWorkspace = useMemo(() => {
-    const grouped: Record<string, string[]> = {};
-    deleteSelections.forEach((cell) => {
-      if (!grouped[cell.workspaceId]) grouped[cell.workspaceId] = [];
-      grouped[cell.workspaceId].push(cell.skillId);
     });
     return grouped;
   }, [deleteSelections]);
@@ -527,8 +517,8 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
               Delete Skills
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete <strong>{deleteSelections.length} skill instances</strong>{" "}
-              from <strong>{Object.keys(deleteByWorkspace).length} workspaces</strong>.
+              Are you sure you want to delete <strong>{Object.keys(deleteBySkill).length} skills</strong>{" "}
+              from <strong>{deleteSelections.length} workspace instances</strong>.
               <br /><br />
               <span className="text-destructive font-medium">This action cannot be undone.</span>
             </DialogDescription>
@@ -536,19 +526,14 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
 
           <div className="space-y-4 py-4">
             <div className="bg-muted rounded-lg p-3 space-y-3 max-h-48 overflow-auto border border-destructive/20">
-              {Object.entries(deleteByWorkspace).map(([wsId, skillIds]) => {
-                const wsName = getWorkspaceName(wsId);
-                const uniqueSkillIds = [...new Set(skillIds)];
+              {Object.entries(deleteBySkill).map(([skillId, wsIds]) => {
+                const skill = matrixData?.skills.find((s) => s.id === skillId);
+                if (!skill) return null;
                 return (
-                  <div key={wsId} className="space-y-1">
-                    <div className="font-medium text-sm text-destructive">{wsName}</div>
-                    <div className="text-xs text-muted-foreground pl-2 space-y-0.5">
-                      {uniqueSkillIds.map((skillId) => {
-                        const skill = matrixData?.skills.find((s) => s.id === skillId);
-                        return skill ? (
-                          <div key={skillId}>• {skill.name}</div>
-                        ) : null;
-                      })}
+                  <div key={skillId} className="space-y-1">
+                    <div className="font-medium text-sm">{skill.name}</div>
+                    <div className="text-xs text-muted-foreground pl-2">
+                      → {wsIds.map(getWorkspaceName).join(", ")}
                     </div>
                   </div>
                 );
