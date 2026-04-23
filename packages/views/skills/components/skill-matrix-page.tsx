@@ -154,6 +154,21 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     return grouped;
   }, [syncSelections]);
 
+  // Group delete selections by skill
+  const deleteBySkill = useMemo(() => {
+    const grouped: Record<string, string[]> = {};
+    deleteSelections.forEach((cell) => {
+      if (!grouped[cell.skillId]) grouped[cell.skillId] = [];
+      grouped[cell.skillId].push(cell.workspaceId);
+    });
+    return grouped;
+  }, [deleteSelections]);
+
+  // Helper to get workspace name by ID
+  const getWorkspaceName = (wsId: string) => {
+    return matrixData?.workspaces.find((w) => w.id === wsId)?.name ?? wsId;
+  };
+
   // Handle sync
   const handleSync = async () => {
     if (syncSelections.length === 0 || !matrixData) return;
@@ -438,14 +453,16 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="bg-muted rounded-lg p-3 space-y-2 max-h-40 overflow-auto">
+            <div className="bg-muted rounded-lg p-3 space-y-3 max-h-48 overflow-auto">
               {Object.entries(syncBySkill).map(([skillId, wsIds]) => {
                 const skill = matrixData?.skills.find((s) => s.id === skillId);
                 if (!skill) return null;
                 return (
-                  <div key={skillId} className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{skill.name}</span>
-                    <span className="text-muted-foreground">→ {wsIds.length} workspace{wsIds.length !== 1 ? 's' : ''}</span>
+                  <div key={skillId} className="space-y-1">
+                    <div className="font-medium text-sm">{skill.name}</div>
+                    <div className="text-xs text-muted-foreground pl-2">
+                      → {wsIds.map(getWorkspaceName).join(", ")}
+                    </div>
                   </div>
                 );
               })}
@@ -492,16 +509,19 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="bg-muted rounded-lg p-3 space-y-2 max-h-40 overflow-auto border border-destructive/20">
-              {skillsToDelete.map((skill) => (
-                <div key={skill.id} className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{skill.name}</span>
-                  <span className="text-muted-foreground">
-                    {deleteSelections.filter((c) => c.skillId === skill.id).length} workspace
-                    {deleteSelections.filter((c) => c.skillId === skill.id).length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-              ))}
+            <div className="bg-muted rounded-lg p-3 space-y-3 max-h-48 overflow-auto border border-destructive/20">
+              {Object.entries(deleteBySkill).map(([skillId, wsIds]) => {
+                const skill = matrixData?.skills.find((s) => s.id === skillId);
+                if (!skill) return null;
+                return (
+                  <div key={skillId} className="space-y-1">
+                    <div className="font-medium text-sm">{skill.name}</div>
+                    <div className="text-xs text-muted-foreground pl-2">
+                      → {wsIds.map(getWorkspaceName).join(", ")}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
