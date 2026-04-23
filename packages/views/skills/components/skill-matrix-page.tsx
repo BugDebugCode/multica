@@ -527,8 +527,8 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
               Delete Skills
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete <strong>{skillsToDelete.length} skills</strong>?{" "}
-              This will remove them from <strong>{deleteSelections.length} workspaces</strong>.
+              Are you sure you want to delete <strong>{deleteSelections.length} skill instances</strong>{" "}
+              from <strong>{Object.keys(deleteByWorkspace).length} workspaces</strong>.
               <br /><br />
               <span className="text-destructive font-medium">This action cannot be undone.</span>
             </DialogDescription>
@@ -574,7 +574,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
               ) : (
                 <Trash2 className="h-4 w-4 mr-2" />
               )}
-              Delete {skillsToDelete.length} skills
+              Delete {deleteSelections.length} cells
             </Button>
           </DialogFooter>
         </DialogContent>
