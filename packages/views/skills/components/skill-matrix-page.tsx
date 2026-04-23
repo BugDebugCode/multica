@@ -168,12 +168,12 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     return grouped;
   }, [syncSelections]);
 
-  // Group delete selections by skill (for dialog display)
+  // Group delete selections by skill name (for dialog display)
   const deleteBySkill = useMemo(() => {
     const grouped: Record<string, string[]> = {};
     deleteSelections.forEach((cell) => {
-      if (!grouped[cell.skillId]) grouped[cell.skillId] = [];
-      grouped[cell.skillId].push(cell.workspaceId);
+      if (!grouped[cell.skillName]) grouped[cell.skillName] = [];
+      grouped[cell.skillName].push(cell.workspaceId);
     });
     return grouped;
   }, [deleteSelections]);
@@ -208,9 +208,13 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     }
 
     // Then handle delete (remove skills)
-    for (const [skillId, workspaceIds] of Object.entries(deleteBySkill)) {
+    for (const [skillName, workspaceIds] of Object.entries(deleteBySkill)) {
+      // Find source skill ID (any instance of this skill to get the name)
+      const sourceSkillId = deleteSelections.find((s) => s.skillName === skillName)?.skillId;
+      if (!sourceSkillId) continue;
+      
       try {
-        const result = await api.deleteSkillFromWorkspaces(skillId, {
+        const result = await api.deleteSkillFromWorkspaces(sourceSkillId, {
           target_workspace_ids: workspaceIds,
         });
         deleteSuccess += result.deleted_count;
@@ -456,7 +460,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
               ) : (
                 <>
                   You are about to <strong className="text-destructive">delete {deleteSelections.length} skills</strong>{" "}
-                  from workspaces
+                  across <strong>{Object.keys(deleteBySkill).length} unique skill types</strong>
                 </>
               )}
             </DialogDescription>
@@ -496,18 +500,14 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                   To Delete ({deleteSelections.length})
                 </div>
                 <div className="bg-muted rounded-lg p-3 space-y-2 max-h-32 overflow-auto border border-destructive/20">
-                  {Object.entries(deleteBySkill).map(([skillId, wsIds]) => {
-                    const skill = matrixData?.skills.find((s) => s.id === skillId);
-                    if (!skill) return null;
-                    return (
-                      <div key={skillId} className="text-sm">
-                        <span className="font-medium">{skill.name}</span>
-                        <span className="text-xs text-muted-foreground ml-2">
-                          → {wsIds.map(getWorkspaceName).join(", ")}
-                        </span>
-                      </div>
-                    );
-                  })}
+                  {Object.entries(deleteBySkill).map(([skillName, wsIds]) => (
+                    <div key={skillName} className="text-sm">
+                      <span className="font-medium">{skillName}</span>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        → {wsIds.map(getWorkspaceName).join(", ")}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
