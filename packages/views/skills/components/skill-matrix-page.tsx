@@ -209,6 +209,41 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     return completelyRemoved;
   }, [deleteBySkill, matrixData]);
 
+  // Check for conflicting operations: skill selected for both sync and delete
+  const conflictingSkills = useMemo(() => {
+    const conflicts: { skillName: string; syncWorkspaces: string[]; deleteWorkspaces: string[] }[] = [];
+    
+    // Get skill names for sync selections
+    const syncSkillNames = new Map<string, string[]>(); // skillName -> workspaces
+    syncSelections.forEach((cell) => {
+      const existing = syncSkillNames.get(cell.skillName) || [];
+      existing.push(cell.workspaceId);
+      syncSkillNames.set(cell.skillName, existing);
+    });
+    
+    // Check if any delete selection has the same skill name
+    deleteSelections.forEach((cell) => {
+      const syncWorkspaces = syncSkillNames.get(cell.skillName);
+      if (syncWorkspaces) {
+        // This skill is being both synced and deleted
+        const existingConflict = conflicts.find((c) => c.skillName === cell.skillName);
+        if (existingConflict) {
+          if (!existingConflict.deleteWorkspaces.includes(cell.workspaceId)) {
+            existingConflict.deleteWorkspaces.push(cell.workspaceId);
+          }
+        } else {
+          conflicts.push({
+            skillName: cell.skillName,
+            syncWorkspaces: [...syncWorkspaces],
+            deleteWorkspaces: [cell.workspaceId],
+          });
+        }
+      }
+    });
+    
+    return conflicts;
+  }, [syncSelections, deleteSelections]);
+
   // Helper to get workspace name by ID
   const getWorkspaceName = (wsId: string) => {
     return matrixData?.workspaces.find((w) => w.id === wsId)?.name ?? wsId;
@@ -507,6 +542,31 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* Conflict warning - skill selected for both sync and delete */}
+            {conflictingSkills.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                <div className="flex items-center gap-2 text-amber-700 font-medium text-sm">
+                  <AlertTriangle className="h-4 w-4" />
+                  Conflicting Operations
+                </div>
+                <p className="text-xs text-amber-600">
+                  The following skills are selected for both sync and delete. Please review your selection:
+                </p>
+                <div className="space-y-1">
+                  {conflictingSkills.map((conflict) => (
+                    <div key={conflict.skillName} className="text-sm">
+                      <span className="font-medium text-amber-800">{conflict.skillName}</span>
+                      <div className="text-xs text-amber-600 ml-2">
+                        <span className="text-primary">Sync to: {conflict.syncWorkspaces.map(getWorkspaceName).join(", ")}</span>
+                        <span className="mx-1">|</span>
+                        <span className="text-destructive">Delete from: {conflict.deleteWorkspaces.map(getWorkspaceName).join(", ")}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Sync section */}
             {syncSelections.length > 0 && (
               <div className="space-y-2">
@@ -587,7 +647,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
             </Button>
             <Button
               onClick={handleApplyChanges}
-              disabled={isProcessing}
+              disabled={isProcessing || conflictingSkills.length > 0}
               variant={deleteSelections.length > 0 ? "destructive" : "default"}
             >
               {isProcessing ? (
