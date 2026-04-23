@@ -362,14 +362,12 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
               <label className="text-sm font-medium">Target Workspaces</label>
               <div className="border rounded-lg divide-y max-h-60 overflow-auto">
                 {matrixData?.workspaces.map((ws) => {
-                  const skillInWs = matrixData.skills.find(
-                    (s) => s.id === selectedSkill?.id
-                  );
-                  const hasSkill = skillInWs
-                    ? matrixData.matrix[
-                        matrixData.skills.findIndex((s) => s.id === selectedSkill?.id)
-                      ]?.[matrixData.workspaces.findIndex((w) => w.id === ws.id)]
-                    : false;
+                  // Check if any selected skill exists in this workspace
+                  const hasAnySkill = selectedSkills.some((skill) => {
+                    const skillIdx = matrixData.skills.findIndex((s) => s.id === skill.id);
+                    const wsIdx = matrixData.workspaces.findIndex((w) => w.id === ws.id);
+                    return matrixData.matrix[skillIdx]?.[wsIdx] ?? false;
+                  });
 
                   return (
                     <div
@@ -387,7 +385,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                           <p className="text-xs text-muted-foreground">{ws.slug}</p>
                         </div>
                       </div>
-                      {hasSkill && (
+                      {hasAnySkill && (
                         <Badge variant="secondary">Exists</Badge>
                       )}
                     </div>
