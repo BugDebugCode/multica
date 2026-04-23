@@ -315,19 +315,14 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                       );
                     })}
                     <td className="px-4 py-3 text-right">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleSyncClick(skill)}
-                          >
-                            <Copy className="h-4 w-4 mr-1" />
-                            Sync
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Sync to other workspaces</TooltipContent>
-                      </Tooltip>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSyncClick(skill)}
+                      >
+                        <Copy className="h-4 w-4 mr-1" />
+                        Sync
+                      </Button>
                     </td>
                   </tr>
                 ))}
