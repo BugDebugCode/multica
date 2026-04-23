@@ -758,11 +758,11 @@ export default function SkillsPage() {
             <div className="flex items-center gap-1">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" asChild>
-                    <Link href="skills/matrix">
+                  <Link href="skills/matrix">
+                    <Button variant="ghost" size="icon-sm">
                       <Grid3X3 className="h-4 w-4 text-muted-foreground" />
-                    </Link>
-                  </Button>
+                    </Button>
+                  </Link>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Matrix View</TooltipContent>
               </Tooltip>
