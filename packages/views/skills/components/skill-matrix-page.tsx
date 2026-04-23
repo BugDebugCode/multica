@@ -48,7 +48,8 @@ interface SkillMatrixPageProps {
 }
 
 interface CellSelection {
-  skillId: string;
+  skillName: string;  // For display/identification
+  skillId: string;     // Actual skill ID for API calls
   workspaceId: string;
   exists: boolean;
 }
@@ -107,19 +108,36 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     return filteredData.matrix[skillIdx]?.[wsIdx] ?? false;
   };
 
+  // Find actual skill ID for a skill name in a specific workspace
+  // This is needed because the matrix shows unique skills by name, but each
+  // workspace may have its own skill instance with a different ID
+  const findSkillIdForWorkspace = (skillName: string, wsId: string): string | null => {
+    if (!matrixData) return null;
+    // Find all skills with this name and return the one for this workspace
+    const skill = matrixData.skills.find((s) => s.name === skillName && s.workspace_id === wsId);
+    return skill?.id ?? null;
+  };
+
   // Check if cell is selected
-  const isCellSelected = (skillId: string, wsId: string) => {
-    return selectedCells.some((c) => c.skillId === skillId && c.workspaceId === wsId);
+  const isCellSelected = (skillName: string, wsId: string) => {
+    return selectedCells.some((c) => c.skillName === skillName && c.workspaceId === wsId);
   };
 
   // Toggle cell selection
-  const toggleCell = (skillId: string, wsId: string, exists: boolean) => {
+  const toggleCell = (skillName: string, wsId: string, exists: boolean) => {
+    // Find the actual skill ID for this workspace
+    const skillId = exists 
+      ? findSkillIdForWorkspace(skillName, wsId)  // For delete: get the skill ID in this workspace
+      : matrixData?.skills.find((s) => s.name === skillName)?.id ?? null;  // For sync: get any source skill
+    
+    if (!skillId) return;
+    
     setSelectedCells((prev) => {
-      const existing = prev.find((c) => c.skillId === skillId && c.workspaceId === wsId);
+      const existing = prev.find((c) => c.skillName === skillName && c.workspaceId === wsId);
       if (existing) {
-        return prev.filter((c) => !(c.skillId === skillId && c.workspaceId === wsId));
+        return prev.filter((c) => !(c.skillName === skillName && c.workspaceId === wsId));
       }
-      return [...prev, { skillId, workspaceId: wsId, exists }];
+      return [...prev, { skillName, skillId, workspaceId: wsId, exists }];
     });
   };
 
@@ -387,14 +405,14 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                     </td>
                     {filteredData.workspaces.map((ws, wsIdx) => {
                       const hasSkill = hasSkillInWorkspace(skillIdx, wsIdx);
-                      const isSelected = isCellSelected(skill.id, ws.id);
-                      const selection = selectedCells.find((c) => c.skillId === skill.id && c.workspaceId === ws.id);
+                      const isSelected = isCellSelected(skill.name, ws.id);
+                      const selection = selectedCells.find((c) => c.skillName === skill.name && c.workspaceId === ws.id);
                       const isDelete = selection?.exists ?? false;
                       
                       return (
                         <td key={ws.id} className="p-2 text-center">
                           <button
-                            onClick={() => toggleCell(skill.id, ws.id, hasSkill)}
+                            onClick={() => toggleCell(skill.name, ws.id, hasSkill)}
                             className={`
                               w-8 h-8 rounded transition-all flex items-center justify-center
                               ${hasSkill 
