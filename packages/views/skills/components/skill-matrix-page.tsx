@@ -72,7 +72,6 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCells, setSelectedCells] = useState<CellSelection[]>([]);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Fetch matrix data
@@ -184,71 +183,57 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     return matrixData?.workspaces.find((w) => w.id === wsId)?.name ?? wsId;
   };
 
-  // Handle sync
-  const handleSync = async () => {
-    if (syncSelections.length === 0 || !matrixData) return;
+  // Handle apply changes - both sync and delete in one operation
+  const handleApplyChanges = async () => {
+    if (selectedCells.length === 0 || !matrixData) return;
 
     setIsProcessing(true);
-    let totalSuccess = 0;
-    let totalFailed = 0;
+    let syncSuccess = 0;
+    let syncFailed = 0;
+    let deleteSuccess = 0;
+    let deleteFailed = 0;
 
+    // First handle sync (add skills)
     for (const [skillId, workspaceIds] of Object.entries(syncBySkill)) {
       try {
         const result = await api.syncSkillToWorkspaces(skillId, {
           target_workspace_ids: workspaceIds,
           overwrite_existing: false,
         });
-        totalSuccess += result.success_count;
-        totalFailed += result.failed_count;
+        syncSuccess += result.success_count;
+        syncFailed += result.failed_count;
       } catch {
-        totalFailed += workspaceIds.length;
+        syncFailed += workspaceIds.length;
       }
     }
 
-    if (totalSuccess > 0) {
-      toast.success(`Synced ${skillsToSync.length} skills to ${totalSuccess} workspaces`);
-    }
-    if (totalFailed > 0) {
-      toast.error(`Failed to sync ${totalFailed} workspaces`);
-    }
-
-    queryClient.invalidateQueries({ queryKey: skillMatrixKeys.all });
-    setSelectedCells([]);
-    setSyncDialogOpen(false);
-    setIsProcessing(false);
-  };
-
-  // Handle delete - works like sync: delete skill from specific workspaces
-  const handleDelete = async () => {
-    if (deleteSelections.length === 0) return;
-
-    setIsProcessing(true);
-    let totalSuccess = 0;
-    let totalFailed = 0;
-
-    // Group by skill and delete from each target workspace
+    // Then handle delete (remove skills)
     for (const [skillId, workspaceIds] of Object.entries(deleteBySkill)) {
       try {
         const result = await api.deleteSkillFromWorkspaces(skillId, {
           target_workspace_ids: workspaceIds,
         });
-        totalSuccess += result.deleted_count;
-        totalFailed += result.failed_count;
+        deleteSuccess += result.deleted_count;
+        deleteFailed += result.failed_count;
       } catch {
-        totalFailed += workspaceIds.length;
+        deleteFailed += workspaceIds.length;
       }
     }
 
-    if (totalSuccess > 0) {
-      toast.success(`Deleted ${totalSuccess} skills from workspaces`);
+    // Show combined toast messages
+    if (syncSuccess > 0) {
+      toast.success(`Synced ${syncSuccess} skills to workspaces`);
     }
-    if (totalFailed > 0) {
-      toast.error(`Failed to delete ${totalFailed} skills`);
+    if (deleteSuccess > 0) {
+      toast.success(`Deleted ${deleteSuccess} skills from workspaces`);
+    }
+    if (syncFailed > 0 || deleteFailed > 0) {
+      toast.error(`Failed: ${syncFailed} sync, ${deleteFailed} delete`);
     }
 
     queryClient.invalidateQueries({ queryKey: skillMatrixKeys.all });
     setSelectedCells([]);
-    setDeleteDialogOpen(false);
+    setSyncDialogOpen(false);
     setIsProcessing(false);
   };
 
@@ -312,24 +297,14 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {syncSelections.length > 0 && (
+          {selectedCells.length > 0 && (
             <Button
               variant="default"
               size="sm"
               onClick={() => setSyncDialogOpen(true)}
             >
               <ArrowRightLeft className="h-4 w-4 mr-2" />
-              Sync {syncSelections.length}
-            </Button>
-          )}
-          {deleteSelections.length > 0 && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setDeleteDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete {deleteSelections.length}
+              Apply Changes ({selectedCells.length})
             </Button>
           )}
         </div>
@@ -459,36 +434,90 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
         )}
       </div>
 
-      {/* Sync Dialog */}
+      {/* Apply Changes Dialog */}
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowRightLeft className="h-5 w-5" />
-              Sync Skills
+              Apply Changes
             </DialogTitle>
             <DialogDescription>
-              You are about to add <strong>{skillsToSync.length} skills</strong> to{" "}
-              <strong>{syncSelections.length} workspaces</strong>
+              {syncSelections.length > 0 && deleteSelections.length > 0 ? (
+                <>
+                  You are about to <strong>sync {syncSelections.length} skills</strong> and{" "}
+                  <strong className="text-destructive">delete {deleteSelections.length} skills</strong>
+                </>
+              ) : syncSelections.length > 0 ? (
+                <>
+                  You are about to add <strong>{skillsToSync.length} skills</strong> to{" "}
+                  <strong>{syncSelections.length} workspaces</strong>
+                </>
+              ) : (
+                <>
+                  You are about to <strong className="text-destructive">delete {deleteSelections.length} skills</strong>{" "}
+                  from workspaces
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="bg-muted rounded-lg p-3 space-y-3 max-h-48 overflow-auto">
-              {Object.entries(syncBySkill).map(([skillId, wsIds]) => {
-                const skill = matrixData?.skills.find((s) => s.id === skillId);
-                if (!skill) return null;
-                const sourceWsName = getWorkspaceName(skill.workspace_id);
-                return (
-                  <div key={skillId} className="space-y-1">
-                    <div className="font-medium text-sm">{skill.name}</div>
-                    <div className="text-xs text-muted-foreground pl-2">
-                      {sourceWsName} → {wsIds.map(getWorkspaceName).join(", ")}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            {/* Sync section */}
+            {syncSelections.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-primary flex items-center gap-2">
+                  <ArrowRightLeft className="h-4 w-4" />
+                  To Sync ({syncSelections.length})
+                </div>
+                <div className="bg-muted rounded-lg p-3 space-y-2 max-h-32 overflow-auto">
+                  {Object.entries(syncBySkill).map(([skillId, wsIds]) => {
+                    const skill = matrixData?.skills.find((s) => s.id === skillId);
+                    if (!skill) return null;
+                    const sourceWsName = getWorkspaceName(skill.workspace_id);
+                    return (
+                      <div key={skillId} className="text-sm">
+                        <span className="font-medium">{skill.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          {sourceWsName} → {wsIds.map(getWorkspaceName).join(", ")}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Delete section */}
+            {deleteSelections.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-destructive flex items-center gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  To Delete ({deleteSelections.length})
+                </div>
+                <div className="bg-muted rounded-lg p-3 space-y-2 max-h-32 overflow-auto border border-destructive/20">
+                  {Object.entries(deleteBySkill).map(([skillId, wsIds]) => {
+                    const skill = matrixData?.skills.find((s) => s.id === skillId);
+                    if (!skill) return null;
+                    return (
+                      <div key={skillId} className="text-sm">
+                        <span className="font-medium">{skill.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          → {wsIds.map(getWorkspaceName).join(", ")}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {deleteSelections.length > 0 && (
+              <p className="text-xs text-destructive font-medium">
+                <Trash2 className="h-3 w-3 inline mr-1" />
+                Deleted skills cannot be undone.
+              </p>
+            )}
           </div>
 
           <DialogFooter>
@@ -500,72 +529,18 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
               Cancel
             </Button>
             <Button
-              onClick={handleSync}
+              onClick={handleApplyChanges}
               disabled={isProcessing}
+              variant={deleteSelections.length > 0 ? "destructive" : "default"}
             >
               {isProcessing ? (
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : deleteSelections.length > 0 ? (
+                <Trash2 className="h-4 w-4 mr-2" />
               ) : (
                 <ArrowRightLeft className="h-4 w-4 mr-2" />
               )}
-              Sync {syncSelections.length} cells
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Trash2 className="h-5 w-5" />
-              Delete Skills
-            </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete <strong>{deleteSelections.length} skills</strong>{" "}
-              across <strong>{Object.keys(deleteBySkill).length} unique skill types</strong>.
-              <br /><br />
-              <span className="text-destructive font-medium">This action cannot be undone.</span>
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="bg-muted rounded-lg p-3 space-y-3 max-h-48 overflow-auto border border-destructive/20">
-              {Object.entries(deleteBySkill).map(([skillId, wsIds]) => {
-                const skill = matrixData?.skills.find((s) => s.id === skillId);
-                if (!skill) return null;
-                return (
-                  <div key={skillId} className="space-y-1">
-                    <div className="font-medium text-sm">{skill.name}</div>
-                    <div className="text-xs text-muted-foreground pl-2">
-                      → {wsIds.map(getWorkspaceName).join(", ")}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-              disabled={isProcessing}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isProcessing}
-            >
-              {isProcessing ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4 mr-2" />
-              )}
-              Delete {deleteSelections.length} cells
+              Apply {selectedCells.length} changes
             </Button>
           </DialogFooter>
         </DialogContent>
