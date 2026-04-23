@@ -270,42 +270,45 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
       />
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b">
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="flex items-center justify-between px-6 py-3 border-b gap-4">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="relative flex-shrink-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
               placeholder="Search skills..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 w-80"
+              className="pl-9 w-[280px] h-9"
             />
           </div>
           {selectedCells.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{selectedCells.length} selected</Badge>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Badge variant="secondary" className="h-6 px-2">
+                {selectedCells.length} selected
+              </Badge>
               {syncSelections.length > 0 && (
-                <Badge variant="outline" className="text-primary border-primary">
+                <Badge variant="outline" className="text-primary border-primary h-6 px-2">
                   {syncSelections.length} to sync
                 </Badge>
               )}
               {deleteSelections.length > 0 && (
-                <Badge variant="outline" className="text-destructive border-destructive">
+                <Badge variant="outline" className="text-destructive border-destructive h-6 px-2">
                   {deleteSelections.length} to delete
                 </Badge>
               )}
-              <Button variant="ghost" size="sm" onClick={clearSelection}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={clearSelection}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {selectedCells.length > 0 && (
             <Button
               variant="default"
               size="sm"
               onClick={() => setSyncDialogOpen(true)}
+              className="h-9"
             >
               <ArrowRightLeft className="h-4 w-4 mr-2" />
               Apply Changes ({selectedCells.length})
@@ -315,21 +318,27 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-6 px-6 py-3 border-b bg-muted/50 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-8 px-6 py-3 border-b bg-muted/50 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
-          <Check className="w-4 h-4 text-green-600" />
+          <div className="w-4 h-4 rounded bg-green-500/10 flex items-center justify-center">
+            <Check className="w-3 h-3 text-green-600" />
+          </div>
           <span>Exists (click to delete)</span>
         </div>
         <div className="flex items-center gap-2">
-          <ArrowRightLeft className="w-4 h-4 text-primary" />
+          <div className="w-4 h-4 rounded bg-primary/10 ring-1 ring-primary flex items-center justify-center">
+            <ArrowRightLeft className="w-3 h-3 text-primary" />
+          </div>
           <span>Selected for sync</span>
         </div>
         <div className="flex items-center gap-2">
-          <Trash2 className="w-4 h-4 text-destructive" />
+          <div className="w-4 h-4 rounded bg-destructive/10 ring-1 ring-destructive flex items-center justify-center">
+            <Trash2 className="w-3 h-3 text-destructive" />
+          </div>
           <span>Selected for delete</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 border border-muted-foreground/30 rounded" />
+          <div className="w-4 h-4 border border-dashed border-muted-foreground/40 rounded" />
           <span>Not present (click to sync)</span>
         </div>
       </div>
@@ -343,27 +352,27 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           </div>
         ) : filteredData && filteredData.skills.length > 0 ? (
           <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm border-collapse">
               <thead className="bg-muted/50 sticky top-0 z-20">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground sticky left-0 bg-muted/50 z-30 border-r min-w-[250px]">
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground sticky left-0 bg-muted/50 z-30 border-r w-[280px] min-w-[280px]">
                     Skill
                   </th>
                   {filteredData.workspaces.map((ws) => (
                     <th
                       key={ws.id}
-                      className="px-2 py-3 text-center font-medium text-muted-foreground min-w-[80px]"
+                      className="px-2 py-3 text-center font-medium text-muted-foreground w-[72px] min-w-[72px]"
                     >
                       <Tooltip>
-                        <TooltipTrigger>
-                          <div className="flex flex-col items-center">
-                            <span className="truncate max-w-[70px] text-xs">{ws.name}</span>
-                            <Badge variant="outline" className="text-[10px] mt-1 px-1.5 py-0">
+                        <TooltipTrigger asChild>
+                          <div className="flex flex-col items-center justify-center gap-1 cursor-pointer">
+                            <span className="truncate max-w-[60px] text-xs leading-none">{ws.name}</span>
+                            <Badge variant="outline" className="text-[10px] leading-none px-1.5 py-0 h-4">
                               {ws.skill_count}
                             </Badge>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent>
+                        <TooltipContent side="top">
                           <p className="font-medium">{ws.name}</p>
                           <p className="text-muted-foreground text-xs">{ws.skill_count} skills</p>
                         </TooltipContent>
@@ -372,14 +381,14 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-border">
                 {filteredData.skills.map((skill, skillIdx) => (
-                  <tr key={skill.id} className="hover:bg-muted/30">
-                    <td className="px-4 py-3 sticky left-0 bg-background z-20 border-r">
-                      <div>
-                        <p className="font-medium text-sm">{skill.name}</p>
+                  <tr key={skill.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3 sticky left-0 bg-background z-20 border-r w-[280px]">
+                      <div className="flex flex-col justify-center">
+                        <p className="font-medium text-sm leading-5">{skill.name}</p>
                         {skill.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-1 max-w-[200px] mt-0.5">
+                          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5 leading-4">
                             {skill.description}
                           </p>
                         )}
@@ -392,18 +401,18 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                       const isDelete = selection?.exists ?? false;
                       
                       return (
-                        <td key={ws.id} className="p-2 text-center">
+                        <td key={ws.id} className="px-2 py-2 text-center w-[72px]">
                           <button
                             onClick={() => toggleCell(skill.name, ws.id, hasSkill)}
                             className={`
-                              w-8 h-8 rounded transition-all flex items-center justify-center
+                              w-8 h-8 rounded transition-all flex items-center justify-center mx-auto
                               ${hasSkill 
                                 ? isSelected
                                   ? "bg-destructive/10 ring-2 ring-destructive"
                                   : "bg-green-500/10 hover:bg-destructive/10"
                                 : isSelected
                                   ? "bg-primary/10 ring-2 ring-primary"
-                                  : "hover:bg-muted border border-muted"
+                                  : "hover:bg-muted border border-dashed border-muted-foreground/30"
                               }
                             `}
                             title={hasSkill 
