@@ -180,36 +180,6 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     return grouped;
   }, [deleteSelections]);
 
-  // Check which skills will be completely removed (deleted from all workspaces)
-  const skillsBeingRemovedCompletely = useMemo(() => {
-    if (!matrixData) return [];
-    const completelyRemoved: string[] = [];
-    
-    Object.entries(deleteBySkill).forEach(([skillName, wsIdsToDelete]) => {
-      // Find all workspaces where this skill exists
-      const skillIdx = matrixData.skills.findIndex((s) => s.name === skillName);
-      if (skillIdx === -1) return;
-      
-      const existingWorkspaces: string[] = [];
-      matrixData.workspaces.forEach((ws, wsIdx) => {
-        if (matrixData.matrix[skillIdx]?.[wsIdx]) {
-          existingWorkspaces.push(ws.id);
-        }
-      });
-      
-      // Check if we're deleting from ALL workspaces where it exists
-      const allWorkspacesBeingDeleted = existingWorkspaces.every((wsId) => 
-        wsIdsToDelete.includes(wsId)
-      );
-      
-      if (allWorkspacesBeingDeleted && existingWorkspaces.length > 0) {
-        completelyRemoved.push(skillName);
-      }
-    });
-    
-    return completelyRemoved;
-  }, [deleteBySkill, matrixData]);
-
   // Check for conflicting operations: skill selected for both sync and delete
   const conflictingSkills = useMemo(() => {
     const conflicts: { skillName: string; syncWorkspaces: string[]; deleteWorkspaces: string[] }[] = [];
@@ -602,39 +572,15 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                   To Delete ({deleteSelections.length})
                 </div>
                 <div className="bg-muted rounded-lg p-3 space-y-2 max-h-32 overflow-auto border border-destructive/20">
-                  {Object.entries(deleteBySkill).map(([skillName, wsIds]) => {
-                    const isCompleteRemoval = skillsBeingRemovedCompletely.includes(skillName);
-                    return (
-                      <div key={skillName} className="text-sm">
-                        <span className="font-medium">{skillName}</span>
-                        <span className="text-xs text-muted-foreground ml-2">
-                          → {wsIds.map(getWorkspaceName).join(", ")}
-                        </span>
-                        {isCompleteRemoval && (
-                          <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0 h-4">
-                            Will be removed completely
-                          </Badge>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {Object.entries(deleteBySkill).map(([skillName, wsIds]) => (
+                    <div key={skillName} className="text-sm">
+                      <span className="font-medium">{skillName}</span>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        → {wsIds.map(getWorkspaceName).join(", ")}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                
-                {/* Warning for skills being completely removed */}
-                {skillsBeingRemovedCompletely.length > 0 && (
-                  <div className="bg-destructive/10 border border-destructive rounded-lg p-3 space-y-1">
-                    <div className="flex items-center gap-2 text-destructive font-medium text-sm">
-                      <AlertTriangle className="h-4 w-4" />
-                      Complete Removal Warning
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      The following skills will be <strong className="text-destructive">completely removed</strong> from the system:
-                    </p>
-                    <div className="text-sm font-medium text-destructive">
-                      {skillsBeingRemovedCompletely.join(", ")}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>
