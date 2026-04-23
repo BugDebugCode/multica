@@ -12,6 +12,7 @@ import {
   X,
   Trash2,
   AlertTriangle,
+  Info,
 } from "lucide-react";
 import type {
   SkillMatrixResponse,
@@ -542,23 +543,24 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Conflict warning - skill selected for both sync and delete */}
+            {/* Info about execution order - skill selected for both sync and delete */}
             {conflictingSkills.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-                <div className="flex items-center gap-2 text-amber-700 font-medium text-sm">
-                  <AlertTriangle className="h-4 w-4" />
-                  Conflicting Operations
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                <div className="flex items-center gap-2 text-blue-700 font-medium text-sm">
+                  <Info className="h-4 w-4" />
+                  Execution Order
                 </div>
-                <p className="text-xs text-amber-600">
-                  The following skills are selected for both sync and delete. Please review your selection:
+                <p className="text-xs text-blue-600">
+                  Skills selected for both sync and delete will be processed in order:
+                  <strong> copy first, then delete</strong>. This allows moving skills between workspaces.
                 </p>
                 <div className="space-y-1">
                   {conflictingSkills.map((conflict) => (
                     <div key={conflict.skillName} className="text-sm">
-                      <span className="font-medium text-amber-800">{conflict.skillName}</span>
-                      <div className="text-xs text-amber-600 ml-2">
-                        <span className="text-primary">Sync to: {conflict.syncWorkspaces.map(getWorkspaceName).join(", ")}</span>
-                        <span className="mx-1">|</span>
+                      <span className="font-medium text-blue-800">{conflict.skillName}</span>
+                      <div className="text-xs text-blue-600 ml-2">
+                        <span className="text-primary">Copy to: {conflict.syncWorkspaces.map(getWorkspaceName).join(", ")}</span>
+                        <span className="mx-1">→</span>
                         <span className="text-destructive">Delete from: {conflict.deleteWorkspaces.map(getWorkspaceName).join(", ")}</span>
                       </div>
                     </div>
@@ -647,7 +649,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
             </Button>
             <Button
               onClick={handleApplyChanges}
-              disabled={isProcessing || conflictingSkills.length > 0}
+              disabled={isProcessing}
               variant={deleteSelections.length > 0 ? "destructive" : "default"}
             >
               {isProcessing ? (
