@@ -487,54 +487,22 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
       {/* Apply Changes Dialog */}
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ArrowRightLeft className="h-5 w-5" />
-              Apply Changes
+          <DialogHeader className="gap-2">
+            <DialogTitle className="text-base font-semibold">
+              Apply Changes ({selectedCells.length})
             </DialogTitle>
-            <DialogDescription>
-              {syncSelections.length > 0 && deleteSelections.length > 0 ? (
-                <>
-                  You are about to <strong>sync {syncSelections.length} skills</strong> and{" "}
-                  <strong className="text-destructive">delete {deleteSelections.length} skills</strong>
-                </>
-              ) : syncSelections.length > 0 ? (
-                <>
-                  You are about to add <strong>{skillsToSync.length} skills</strong> to{" "}
-                  <strong>{syncSelections.length} workspaces</strong>
-                </>
-              ) : (
-                <>
-                  You are about to <strong className="text-destructive">delete {deleteSelections.length} skills</strong>{" "}
-                  across <strong>{Object.keys(deleteBySkill).length} unique skill types</strong>
-                </>
-              )}
+            <DialogDescription className="text-sm">
+              Review the operations below before confirming.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Info about execution order - skill selected for both sync and delete */}
+            {/* Info about execution order */}
             {conflictingSkills.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
-                <div className="flex items-center gap-2 text-blue-700 font-medium text-sm">
+              <div className="rounded-md bg-muted px-3 py-2 text-sm">
+                <div className="flex items-center gap-2 text-muted-foreground">
                   <Info className="h-4 w-4" />
-                  Execution Order
-                </div>
-                <p className="text-xs text-blue-600">
-                  Skills selected for both sync and delete will be processed in order:
-                  <strong> copy first, then delete</strong>. This allows moving skills between workspaces.
-                </p>
-                <div className="space-y-1">
-                  {conflictingSkills.map((conflict) => (
-                    <div key={conflict.skillName} className="text-sm">
-                      <span className="font-medium text-blue-800">{conflict.skillName}</span>
-                      <div className="text-xs text-blue-600 ml-2">
-                        <span className="text-primary">Copy to: {conflict.syncWorkspaces.map(getWorkspaceName).join(", ")}</span>
-                        <span className="mx-1">→</span>
-                        <span className="text-destructive">Delete from: {conflict.deleteWorkspaces.map(getWorkspaceName).join(", ")}</span>
-                      </div>
-                    </div>
-                  ))}
+                  <span>Execution order: copy first, then delete</span>
                 </div>
               </div>
             )}
@@ -542,19 +510,20 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
             {/* Sync section */}
             {syncSelections.length > 0 && (
               <div className="space-y-2">
-                <div className="text-sm font-medium text-primary flex items-center gap-2">
-                  <ArrowRightLeft className="h-4 w-4" />
-                  To Sync ({syncSelections.length})
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <ArrowRightLeft className="h-4 w-4 text-primary" />
+                  <span>Copy to workspaces</span>
+                  <span className="text-muted-foreground">({syncSelections.length})</span>
                 </div>
-                <div className="bg-muted rounded-lg p-3 space-y-2 max-h-32 overflow-auto">
+                <div className="rounded-md border bg-muted/50 p-3 space-y-1.5 max-h-32 overflow-auto">
                   {Object.entries(syncBySkill).map(([skillId, wsIds]) => {
                     const skill = matrixData?.skills.find((s) => s.id === skillId);
                     if (!skill) return null;
                     const sourceWsName = getWorkspaceName(skill.workspace_id);
                     return (
-                      <div key={skillId} className="text-sm">
+                      <div key={skillId} className="flex items-center justify-between text-sm">
                         <span className="font-medium">{skill.name}</span>
-                        <span className="text-xs text-muted-foreground ml-2">
+                        <span className="text-xs text-muted-foreground">
                           {sourceWsName} → {wsIds.map(getWorkspaceName).join(", ")}
                         </span>
                       </div>
@@ -567,15 +536,16 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
             {/* Delete section */}
             {deleteSelections.length > 0 && (
               <div className="space-y-2">
-                <div className="text-sm font-medium text-destructive flex items-center gap-2">
-                  <Trash2 className="h-4 w-4" />
-                  To Delete ({deleteSelections.length})
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                  <span>Delete from workspaces</span>
+                  <span className="text-muted-foreground">({deleteSelections.length})</span>
                 </div>
-                <div className="bg-muted rounded-lg p-3 space-y-2 max-h-32 overflow-auto border border-destructive/20">
+                <div className="rounded-md border border-destructive/20 bg-muted/50 p-3 space-y-1.5 max-h-32 overflow-auto">
                   {Object.entries(deleteBySkill).map(([skillName, wsIds]) => (
-                    <div key={skillName} className="text-sm">
+                    <div key={skillName} className="flex items-center justify-between text-sm">
                       <span className="font-medium">{skillName}</span>
-                      <span className="text-xs text-muted-foreground ml-2">
+                      <span className="text-xs text-muted-foreground">
                         → {wsIds.map(getWorkspaceName).join(", ")}
                       </span>
                     </div>
@@ -585,27 +555,33 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setSyncDialogOpen(false)}
               disabled={isProcessing}
             >
               Cancel
             </Button>
             <Button
+              size="sm"
               onClick={handleApplyChanges}
               disabled={isProcessing}
               variant={deleteSelections.length > 0 ? "destructive" : "default"}
             >
               {isProcessing ? (
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : deleteSelections.length > 0 ? (
-                <Trash2 className="h-4 w-4 mr-2" />
               ) : (
-                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                <>
+                  {deleteSelections.length > 0 ? (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  ) : (
+                    <ArrowRightLeft className="h-4 w-4 mr-2" />
+                  )}
+                  Apply
+                </>
               )}
-              Apply {selectedCells.length} changes
             </Button>
           </DialogFooter>
         </DialogContent>
