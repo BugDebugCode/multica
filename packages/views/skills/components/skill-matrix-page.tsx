@@ -50,7 +50,7 @@ interface SkillMatrixPageProps {
 interface CellSelection {
   skillId: string;
   workspaceId: string;
-  exists: boolean; // true = skill exists (will be deleted), false = skill doesn't exist (will be synced)
+  exists: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +194,6 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
 
     setIsProcessing(true);
     
-    // Get unique skill IDs to delete
     const skillIdsToDelete = [...new Set(deleteSelections.map((c) => c.skillId))];
     
     try {
@@ -246,7 +245,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
       />
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
+      <div className="flex items-center justify-between px-6 py-4 border-b">
         <div className="flex items-center gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -259,16 +258,14 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           </div>
           {selectedCells.length > 0 && (
             <div className="flex items-center gap-2">
-              <Badge variant="default" className="bg-primary">
-                {selectedCells.length} selected
-              </Badge>
+              <Badge variant="secondary">{selectedCells.length} selected</Badge>
               {syncSelections.length > 0 && (
-                <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                <Badge variant="outline" className="text-primary border-primary">
                   {syncSelections.length} to sync
                 </Badge>
               )}
               {deleteSelections.length > 0 && (
-                <Badge variant="secondary" className="bg-red-100 text-red-700">
+                <Badge variant="outline" className="text-destructive border-destructive">
                   {deleteSelections.length} to delete
                 </Badge>
               )}
@@ -283,7 +280,6 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
             <Button
               variant="default"
               size="sm"
-              className="bg-blue-600 hover:bg-blue-700"
               onClick={() => setSyncDialogOpen(true)}
             >
               <ArrowRightLeft className="h-4 w-4 mr-2" />
@@ -304,23 +300,21 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-6 px-6 py-2 border-b bg-muted/10 text-xs">
+      <div className="flex items-center gap-6 px-6 py-3 border-b bg-muted/50 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-green-500/20 border border-green-500/50 flex items-center justify-center">
-            <Check className="w-3 h-3 text-green-600" />
-          </div>
-          <span>Skill exists (click to delete)</span>
+          <Check className="w-4 h-4 text-green-600" />
+          <span>Exists (click to delete)</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-blue-500/20 border-2 border-blue-500" />
+          <ArrowRightLeft className="w-4 h-4 text-primary" />
           <span>Selected for sync</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-red-500/20 border-2 border-red-500" />
+          <Trash2 className="w-4 h-4 text-destructive" />
           <span>Selected for delete</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded border border-muted-foreground/30" />
+          <div className="w-4 h-4 border border-muted-foreground/30 rounded" />
           <span>Not present (click to sync)</span>
         </div>
       </div>
@@ -333,7 +327,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
             <Skeleton className="h-96 w-full" />
           </div>
         ) : filteredData && filteredData.skills.length > 0 ? (
-          <div className="border rounded-lg overflow-hidden shadow-sm">
+          <div className="border rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 sticky top-0 z-20">
                 <tr>
@@ -365,7 +359,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
               </thead>
               <tbody className="divide-y">
                 {filteredData.skills.map((skill, skillIdx) => (
-                  <tr key={skill.id} className="hover:bg-muted/20 transition-colors">
+                  <tr key={skill.id} className="hover:bg-muted/30">
                     <td className="px-4 py-3 sticky left-0 bg-background z-20 border-r">
                       <div>
                         <p className="font-medium text-sm">{skill.name}</p>
@@ -383,32 +377,32 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
                       const isDelete = selection?.exists ?? false;
                       
                       return (
-                        <td key={ws.id} className="p-1 text-center">
+                        <td key={ws.id} className="p-2 text-center">
                           <button
                             onClick={() => toggleCell(skill.id, ws.id, hasSkill)}
                             className={`
-                              w-8 h-8 rounded-md transition-all flex items-center justify-center
+                              w-8 h-8 rounded transition-all flex items-center justify-center
                               ${hasSkill 
                                 ? isSelected
-                                  ? "bg-red-500/20 border-2 border-red-500 hover:bg-red-500/30"
-                                  : "bg-green-500/15 border border-green-500/30 hover:border-red-500 hover:bg-red-500/10"
+                                  ? "bg-destructive/10 ring-2 ring-destructive"
+                                  : "bg-green-500/10 hover:bg-destructive/10"
                                 : isSelected
-                                  ? "bg-blue-500/20 border-2 border-blue-500 hover:bg-blue-500/30"
-                                  : "border border-muted-foreground/20 hover:border-blue-500 hover:bg-blue-500/10"
+                                  ? "bg-primary/10 ring-2 ring-primary"
+                                  : "hover:bg-muted border border-muted"
                               }
                             `}
                             title={hasSkill 
                               ? isSelected
-                                ? `Click to cancel deletion of ${skill.name} from ${ws.name}`
-                                : `Click to delete ${skill.name} from ${ws.name}`
+                                ? `Cancel deletion of ${skill.name} from ${ws.name}`
+                                : `Delete ${skill.name} from ${ws.name}`
                               : isSelected 
-                                ? `Click to cancel sync of ${skill.name} to ${ws.name}`
-                                : `Click to sync ${skill.name} to ${ws.name}`
+                                ? `Cancel sync of ${skill.name} to ${ws.name}`
+                                : `Sync ${skill.name} to ${ws.name}`
                             }
                           >
                             {hasSkill && !isSelected && <Check className="w-4 h-4 text-green-600" />}
-                            {hasSkill && isSelected && <Trash2 className="w-4 h-4 text-red-600" />}
-                            {!hasSkill && isSelected && <ArrowRightLeft className="w-4 h-4 text-blue-600" />}
+                            {hasSkill && isSelected && <Trash2 className="w-4 h-4 text-destructive" />}
+                            {!hasSkill && isSelected && <ArrowRightLeft className="w-4 h-4 text-primary" />}
                           </button>
                         </td>
                       );
@@ -434,7 +428,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowRightLeft className="h-5 w-5 text-blue-600" />
+              <ArrowRightLeft className="h-5 w-5" />
               Sync Skills
             </DialogTitle>
             <DialogDescription>
@@ -444,7 +438,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="bg-muted/50 rounded-lg p-3 space-y-2 max-h-40 overflow-auto">
+            <div className="bg-muted rounded-lg p-3 space-y-2 max-h-40 overflow-auto">
               {Object.entries(syncBySkill).map(([skillId, wsIds]) => {
                 const skill = matrixData?.skills.find((s) => s.id === skillId);
                 if (!skill) return null;
@@ -469,7 +463,6 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
             <Button
               onClick={handleSync}
               disabled={isProcessing}
-              className="bg-blue-600 hover:bg-blue-700"
             >
               {isProcessing ? (
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -499,7 +492,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="bg-red-50 rounded-lg p-3 space-y-2 max-h-40 overflow-auto border border-red-200">
+            <div className="bg-muted rounded-lg p-3 space-y-2 max-h-40 overflow-auto border border-destructive/20">
               {skillsToDelete.map((skill) => (
                 <div key={skill.id} className="flex items-center justify-between text-sm">
                   <span className="font-medium">{skill.name}</span>
