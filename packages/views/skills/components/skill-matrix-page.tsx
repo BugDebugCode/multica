@@ -482,11 +482,12 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
               {Object.entries(syncBySkill).map(([skillId, wsIds]) => {
                 const skill = matrixData?.skills.find((s) => s.id === skillId);
                 if (!skill) return null;
+                const sourceWsName = getWorkspaceName(skill.workspace_id);
                 return (
                   <div key={skillId} className="space-y-1">
                     <div className="font-medium text-sm">{skill.name}</div>
                     <div className="text-xs text-muted-foreground pl-2">
-                      → {wsIds.map(getWorkspaceName).join(", ")}
+                      {sourceWsName} → {wsIds.map(getWorkspaceName).join(", ")}
                     </div>
                   </div>
                 );
