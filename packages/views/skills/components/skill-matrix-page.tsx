@@ -85,6 +85,7 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
   const { data: matrixData, isLoading } = useQuery({
     queryKey: skillMatrixKeys.matrix(),
     queryFn: () => api.getSkillMatrix(),
+    staleTime: 0, // Always refetch when component mounts or cache is invalidated
   });
 
   // Sync mutation
