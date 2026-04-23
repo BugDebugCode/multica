@@ -218,31 +218,37 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     setIsProcessing(false);
   };
 
-  // Handle delete
+  // Handle delete - works like sync: delete skill from specific workspaces
   const handleDelete = async () => {
     if (deleteSelections.length === 0) return;
 
     setIsProcessing(true);
-    
-    const skillIdsToDelete = [...new Set(deleteSelections.map((c) => c.skillId))];
-    
-    try {
-      const result = await api.bulkDeleteSkills({ skill_ids: skillIdsToDelete });
-      
-      if (result.deleted_count > 0) {
-        toast.success(`Deleted ${result.deleted_count} skills`);
+    let totalSuccess = 0;
+    let totalFailed = 0;
+
+    // Group by skill and delete from each target workspace
+    for (const [skillId, workspaceIds] of Object.entries(deleteBySkill)) {
+      try {
+        const result = await api.deleteSkillFromWorkspaces(skillId, {
+          target_workspace_ids: workspaceIds,
+        });
+        totalSuccess += result.deleted_count;
+        totalFailed += result.failed_count;
+      } catch {
+        totalFailed += workspaceIds.length;
       }
-      if (result.failed_count > 0) {
-        toast.error(`Failed to delete ${result.failed_count} skills`);
-      }
-      
-      queryClient.invalidateQueries({ queryKey: skillMatrixKeys.all });
-      setSelectedCells([]);
-      setDeleteDialogOpen(false);
-    } catch {
-      toast.error("Failed to delete skills");
     }
-    
+
+    if (totalSuccess > 0) {
+      toast.success(`Deleted ${totalSuccess} skills from workspaces`);
+    }
+    if (totalFailed > 0) {
+      toast.error(`Failed to delete ${totalFailed} skills`);
+    }
+
+    queryClient.invalidateQueries({ queryKey: skillMatrixKeys.all });
+    setSelectedCells([]);
+    setDeleteDialogOpen(false);
     setIsProcessing(false);
   };
 

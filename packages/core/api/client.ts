@@ -888,6 +888,13 @@ export class ApiClient {
     });
   }
 
+  async deleteSkillFromWorkspaces(skillId: string, data: { target_workspace_ids: string[] }): Promise<{ deleted_count: number; failed_count: number; failed_ids?: string[] }> {
+    return this.fetch(`/api/skills/${skillId}/delete-from-workspaces`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   // Personal Access Tokens
   async listPersonalAccessTokens(): Promise<PersonalAccessToken[]> {
     return this.fetch("/api/tokens");

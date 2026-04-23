@@ -366,6 +366,7 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 					r.Put("/", h.UpdateSkill)
 					r.Delete("/", h.DeleteSkill)
 					r.Get("/files", h.ListSkillFiles)
+					r.Post("/delete-from-workspaces", h.DeleteSkillFromWorkspaces)
 					r.Put("/files", h.UpsertSkillFile)
 					r.Delete("/files/{fileId}", h.DeleteSkillFile)
 					r.Post("/sync", h.SyncSkillToWorkspaces)

@@ -576,3 +576,104 @@ func (h *Handler) BulkDeleteSkills(w http.ResponseWriter, r *http.Request) {
 		FailedIDs:    failedIDs,
 	})
 }
+
+// DeleteSkillFromWorkspacesRequest represents a request to delete a skill from specific workspaces
+type DeleteSkillFromWorkspacesRequest struct {
+	TargetWorkspaceIDs []string `json:"target_workspace_ids"`
+}
+
+// DeleteSkillFromWorkspacesResponse represents the result of delete operation
+type DeleteSkillFromWorkspacesResponse struct {
+	DeletedCount int      `json:"deleted_count"`
+	FailedCount  int      `json:"failed_count"`
+	FailedIDs    []string `json:"failed_ids,omitempty"`
+}
+
+// DeleteSkillFromWorkspaces deletes a skill (by name) from specific target workspaces
+// Similar to SyncSkillToWorkspaces but deletes instead of copies
+func (h *Handler) DeleteSkillFromWorkspaces(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	skillID := chi.URLParam(r, "id")
+
+	var req DeleteSkillFromWorkspacesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if len(req.TargetWorkspaceIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "target_workspace_ids are required")
+		return
+	}
+
+	// Get source skill to get its name
+	sourceSkill, err := h.Queries.GetSkill(r.Context(), parseUUID(skillID))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "skill not found")
+		return
+	}
+
+	skillName := sourceSkill.Name
+	deletedCount := 0
+	failedIDs := []string{}
+
+	// Find and delete skills with the same name in target workspaces
+	for _, targetWsID := range req.TargetWorkspaceIDs {
+		targetWsUUID := parseUUID(targetWsID)
+
+		// Verify user has access to target workspace
+		_, err := h.Queries.GetWorkspaceMembership(r.Context(), db.GetWorkspaceMembershipParams{
+			WorkspaceID: targetWsUUID,
+			UserID:      parseUUID(userID),
+		})
+		if err != nil {
+			failedIDs = append(failedIDs, targetWsID)
+			continue
+		}
+
+		// Find skill with the same name in target workspace
+		targetSkills, err := h.Queries.ListSkillsByWorkspace(r.Context(), targetWsUUID)
+		if err != nil {
+			failedIDs = append(failedIDs, targetWsID)
+			continue
+		}
+
+		var skillToDelete *db.Skill
+		for _, s := range targetSkills {
+			if s.Name == skillName {
+				skillToDelete = &s
+				break
+			}
+		}
+
+		if skillToDelete == nil {
+			// Skill doesn't exist in this workspace, skip
+			continue
+		}
+
+		// Delete the skill
+		if err := h.Queries.DeleteSkill(r.Context(), skillToDelete.ID); err != nil {
+			failedIDs = append(failedIDs, targetWsID)
+			continue
+		}
+
+		deletedCount++
+
+		// Publish event
+		actorType, actorID := h.resolveActor(r, userID, targetWsID)
+		h.publish(protocol.EventSkillDeleted, targetWsID, actorType, actorID, map[string]any{
+			"skill_id": uuidToString(skillToDelete.ID),
+			"skill_name": skillName,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, DeleteSkillFromWorkspacesResponse{
+		DeletedCount: deletedCount,
+		FailedCount:  len(failedIDs),
+		FailedIDs:    failedIDs,
+	})
+}
