@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { useDefaultLayout } from "react-resizable-panels";
 import {
   Sparkles,
@@ -10,6 +11,7 @@ import {
   AlertCircle,
   Download,
   HardDrive,
+  Grid3X3,
 } from "lucide-react";
 import type { Skill, CreateSkillRequest, UpdateSkillRequest } from "@multica/core/types";
 import {
@@ -753,20 +755,32 @@ export default function SkillsPage() {
         <div className="overflow-y-auto h-full border-r">
           <PageHeader className="justify-between">
             <h1 className="text-sm font-semibold">Skills</h1>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setShowCreate(true)}
-                  >
-                    <Plus className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" asChild>
+                    <Link href="skills/matrix">
+                      <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+                    </Link>
                   </Button>
-                }
-              />
-              <TooltipContent side="bottom">Add skill</TooltipContent>
-            </Tooltip>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Matrix View</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setShowCreate(true)}
+                    >
+                      <Plus className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">Add skill</TooltipContent>
+              </Tooltip>
+            </div>
           </PageHeader>
           {skills.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-4 py-12">
