@@ -38,7 +38,6 @@ import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { api } from "@multica/core/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWorkspaceId } from "@multica/core/hooks";
-import { useCurrentWorkspace } from "@multica/core/paths/hooks";
 import { skillListOptions, workspaceKeys } from "@multica/core/workspace/queries";
 
 import { PageHeader } from "../../layout/page-header";
@@ -384,7 +383,6 @@ function SkillDetail({
 }) {
   const qc = useQueryClient();
   const wsId = useWorkspaceId();
-  const workspace = useCurrentWorkspace();
   const [name, setName] = useState(skill.name);
   const [description, setDescription] = useState(skill.description);
   const [content, setContent] = useState(skill.content);
