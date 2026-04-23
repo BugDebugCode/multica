@@ -179,6 +179,16 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
     return grouped;
   }, [deleteSelections]);
 
+  // Group delete selections by workspace (for dialog display)
+  const deleteByWorkspace = useMemo(() => {
+    const grouped: Record<string, string[]> = {};
+    deleteSelections.forEach((cell) => {
+      if (!grouped[cell.workspaceId]) grouped[cell.workspaceId] = [];
+      grouped[cell.workspaceId].push(cell.skillId);
+    });
+    return grouped;
+  }, [deleteSelections]);
+
   // Helper to get workspace name by ID
   const getWorkspaceName = (wsId: string) => {
     return matrixData?.workspaces.find((w) => w.id === wsId)?.name ?? wsId;
@@ -525,14 +535,19 @@ export function SkillMatrixPage({ onBack }: SkillMatrixPageProps) {
 
           <div className="space-y-4 py-4">
             <div className="bg-muted rounded-lg p-3 space-y-3 max-h-48 overflow-auto border border-destructive/20">
-              {Object.entries(deleteBySkill).map(([skillId, wsIds]) => {
-                const skill = matrixData?.skills.find((s) => s.id === skillId);
-                if (!skill) return null;
+              {Object.entries(deleteByWorkspace).map(([wsId, skillIds]) => {
+                const wsName = getWorkspaceName(wsId);
+                const uniqueSkillIds = [...new Set(skillIds)];
                 return (
-                  <div key={skillId} className="space-y-1">
-                    <div className="font-medium text-sm">{skill.name}</div>
-                    <div className="text-xs text-muted-foreground pl-2">
-                      → {wsIds.map(getWorkspaceName).join(", ")}
+                  <div key={wsId} className="space-y-1">
+                    <div className="font-medium text-sm text-destructive">{wsName}</div>
+                    <div className="text-xs text-muted-foreground pl-2 space-y-0.5">
+                      {uniqueSkillIds.map((skillId) => {
+                        const skill = matrixData?.skills.find((s) => s.id === skillId);
+                        return skill ? (
+                          <div key={skillId}>• {skill.name}</div>
+                        ) : null;
+                      })}
                     </div>
                   </div>
                 );
