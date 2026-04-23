@@ -38,6 +38,7 @@ import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { api } from "@multica/core/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWorkspaceId } from "@multica/core/hooks";
+import { useCurrentWorkspace } from "@multica/core/paths/hooks";
 import { skillListOptions, workspaceKeys } from "@multica/core/workspace/queries";
 
 import { PageHeader } from "../../layout/page-header";
@@ -383,6 +384,7 @@ function SkillDetail({
 }) {
   const qc = useQueryClient();
   const wsId = useWorkspaceId();
+  const workspace = useCurrentWorkspace();
   const [name, setName] = useState(skill.name);
   const [description, setDescription] = useState(skill.description);
   const [content, setContent] = useState(skill.content);
@@ -613,7 +615,7 @@ function SkillDetail({
               <DialogHeader className="flex-1 gap-1">
                 <DialogTitle className="text-sm font-semibold">Delete skill?</DialogTitle>
                 <DialogDescription className="text-xs">
-                  This will permanently delete &quot;{skill.name}&quot; and remove it from all agents.
+                  This will permanently delete &quot;{skill.name}&quot; from workspace &quot;{workspace?.name ?? "this workspace"}&quot; and remove it from all agents.
                 </DialogDescription>
               </DialogHeader>
             </div>
