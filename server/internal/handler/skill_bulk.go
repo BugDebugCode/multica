@@ -2,8 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -251,10 +251,10 @@ func (h *Handler) SyncSkillToWorkspaces(w http.ResponseWriter, r *http.Request) 
 
 		// Copy skill
 		newSkill, err := h.Queries.CopySkillToWorkspace(r.Context(), db.CopySkillToWorkspaceParams{
-			ID:        sourceSkill.ID,
-			Column2:   targetUUID,
-			Column3:   parseUUID(userID),
-			Column4:   req.OverwriteExisting,
+			ID:          sourceSkill.ID,
+			WorkspaceID: targetUUID,
+			CreatedBy:   parseUUID(userID),
+			Column4:     req.OverwriteExisting,
 		})
 		if err != nil {
 			failedIDs = append(failedIDs, targetWsID)
@@ -264,8 +264,8 @@ func (h *Handler) SyncSkillToWorkspaces(w http.ResponseWriter, r *http.Request) 
 		// Copy files if skill was created or updated
 		if len(files) > 0 {
 			err = h.Queries.CopySkillFiles(r.Context(), db.CopySkillFilesParams{
-				ID:      sourceSkill.ID,
-				Column2: newSkill.ID,
+				SkillID:   sourceSkill.ID,
+				SkillID_2: newSkill.ID,
 			})
 			if err != nil {
 				// Log error but don't fail the whole operation
@@ -361,22 +361,22 @@ func (h *Handler) BulkCopySkills(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Check if skill exists in target
-			existingSkill, _ := h.Queries.GetSkillByNameInWorkspace(r.Context(), db.GetSkillByNameInWorkspaceParams{
+			_, err = h.Queries.GetSkillByNameInWorkspace(r.Context(), db.GetSkillByNameInWorkspaceParams{
 				WorkspaceID: targetUUID,
 				Name:        skill.Name,
 			})
 
-			if existingSkill.ID != nilUUID && !req.OverwriteExisting {
+			if err == nil && !req.OverwriteExisting {
 				skippedCount++
 				continue
 			}
 
 			// Copy skill
 			newSkill, err := h.Queries.CopySkillToWorkspace(r.Context(), db.CopySkillToWorkspaceParams{
-				ID:        skill.ID,
-				Column2:   targetUUID,
-				Column3:   parseUUID(userID),
-				Column4:   req.OverwriteExisting,
+				ID:          skill.ID,
+				WorkspaceID: targetUUID,
+				CreatedBy:   parseUUID(userID),
+				Column4:     req.OverwriteExisting,
 			})
 			if err != nil {
 				continue
@@ -385,8 +385,8 @@ func (h *Handler) BulkCopySkills(w http.ResponseWriter, r *http.Request) {
 			// Copy files
 			if len(files) > 0 {
 				h.Queries.CopySkillFiles(r.Context(), db.CopySkillFilesParams{
-					ID:      skill.ID,
-					Column2: newSkill.ID,
+					SkillID:   skill.ID,
+					SkillID_2: newSkill.ID,
 				})
 			}
 
